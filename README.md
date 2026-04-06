@@ -156,22 +156,33 @@ All skills follow these principles:
 5. **Link everything** - To code, docs, tickets, PRs
 6. **Be honest** - Acknowledge limitations and unknowns
 
-## Contributing
+## Maintenance
 
-To improve these skills:
+This directory is a git repo synced to [akshatdalton/skills](https://github.com/akshatdalton/skills) (private).
 
-1. **Try them** - Use each skill in real work
-2. **Note what works** - What was helpful?
-3. **Note what's missing** - What would improve it?
-4. **Update the skill** - Add improvements back here
+### Day-to-day
 
-## Organization
+Edit any skill in `~/.claude/skills/` normally, then push:
+```
+/sync-skills
+```
+This commits all changes and pushes to GitHub. If you added a new skill, the command will also remind you to run `/plugin update skills@akshat-skills` on other machines to pick it up.
 
-All skills live in `./claude_skills/`:
-- One markdown file per skill
-- Standalone but interconnected
-- No external dependencies
-- Easy to search and reference
+### On a new machine
+
+```bash
+# 1. Add marketplace to ~/.claude/settings.json → extraKnownMarketplaces:
+#    "akshat-skills": { "source": { "source": "github", "repo": "akshatdalton/skills" } }
+
+# 2. Install the plugin:
+/plugin install skills@akshat-skills
+```
+
+### Updating skills on other machines
+
+```
+/plugin update skills@akshat-skills
+```
 
 ---
 
