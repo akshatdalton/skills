@@ -171,17 +171,27 @@ This commits all changes and pushes to GitHub. If you added a new skill, the com
 ### On a new machine
 
 ```bash
-# 1. Add marketplace to ~/.claude/settings.json → extraKnownMarketplaces:
+# 1. Add to ~/.claude/settings.json → extraKnownMarketplaces:
 #    "akshat-skills": { "source": { "source": "github", "repo": "akshatdalton/skills" } }
 
-# 2. Install the plugin:
-/plugin install skills@akshat-skills
+# 2. Fetch the marketplace (private repo — needs personal SSH key):
+GIT_SSH_COMMAND="ssh -i ~/.ssh/id_ed25519_personal -o IdentitiesOnly=yes" \
+  claude plugin marketplace add git@github.com:akshatdalton/skills.git
+
+# 3. Install the plugin:
+claude plugin install skills@akshat-skills
+
+# 4. Set personal git identity for the skills repo:
+git -C ~/.claude/skills config user.name "akshatdalton"
+git -C ~/.claude/skills config user.email "akshat25iiit@gmail.com"
 ```
 
 ### Updating skills on other machines
 
-```
-/plugin update skills@akshat-skills
+```bash
+GIT_SSH_COMMAND="ssh -i ~/.ssh/id_ed25519_personal -o IdentitiesOnly=yes" \
+  claude plugin marketplace update akshat-skills
+claude plugin update skills@akshat-skills
 ```
 
 ---
