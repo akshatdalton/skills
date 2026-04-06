@@ -41,10 +41,8 @@ Show the commit hash + message and confirm push succeeded.
 
 ## If new skills were added
 
-After pushing, remind the user to reload the plugin on any other machine:
+After pushing, remind the user to pull on any other machine:
+```bash
+git -C ~/.claude/skills pull
 ```
-/plugin update skills@akshat-skills
-```
-This pulls the latest from GitHub and makes newly added skills available in Claude.
-
-On the current machine the skills are already live (loaded directly from `~/.claude/skills/`).
+Skills load directly from `~/.claude/skills/` — no plugin install needed. Pull is enough.

@@ -166,32 +166,26 @@ Edit any skill in `~/.claude/skills/` normally, then push:
 ```
 /sync-skills
 ```
-This commits all changes and pushes to GitHub. If you added a new skill, the command will also remind you to run `/plugin update skills@akshat-skills` on other machines to pick it up.
 
 ### On a new machine
 
+Skills load directly from `~/.claude/skills/` — no plugin install needed. Just clone:
+
 ```bash
-# 1. Add to ~/.claude/settings.json → extraKnownMarketplaces:
-#    "akshat-skills": { "source": { "source": "github", "repo": "akshatdalton/skills" } }
+# Clone repo into Claude's user skills directory
+git clone git@github.com:akshatdalton/skills.git ~/.claude/skills
 
-# 2. Fetch the marketplace (private repo — needs personal SSH key):
-GIT_SSH_COMMAND="ssh -i ~/.ssh/id_ed25519_personal -o IdentitiesOnly=yes" \
-  claude plugin marketplace add git@github.com:akshatdalton/skills.git
-
-# 3. Install the plugin:
-claude plugin install skills@akshat-skills
-
-# 4. Set personal git identity for the skills repo:
+# Set personal git identity
 git -C ~/.claude/skills config user.name "akshatdalton"
 git -C ~/.claude/skills config user.email "akshat25iiit@gmail.com"
 ```
 
+Skills are live immediately. Use `/sync-skills` to push changes back.
+
 ### Updating skills on other machines
 
 ```bash
-GIT_SSH_COMMAND="ssh -i ~/.ssh/id_ed25519_personal -o IdentitiesOnly=yes" \
-  claude plugin marketplace update akshat-skills
-claude plugin update skills@akshat-skills
+git -C ~/.claude/skills pull
 ```
 
 ---
