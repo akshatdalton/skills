@@ -1,8 +1,14 @@
 {
+  "name": "akshat-skills",
+  "owner": { "name": "akshatdalton" },
   "plugins": [
     {
       "name": "skills",
-      "source": "./"
+      "source": {
+        "source": "github",
+        "repo": "akshatdalton/skills"
+      },
+      "description": "Akshat's personal Claude Code skills"
     }
   ]
 }
