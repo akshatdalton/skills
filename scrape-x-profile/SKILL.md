@@ -48,7 +48,83 @@ ToolSearch: select:mcp__claude-in-chrome__javascript_tool
 
 ---
 
-## Step 3 — Scrape loop
+## Step 3 — Scrape profile metadata
+
+Before the tweet loop, extract account info via JS:
+
+```javascript
+(function() {
+  // Display name & handle
+  const nameEl = document.querySelector('[data-testid="UserName"]');
+  const displayName = nameEl ? nameEl.querySelector('span')?.innerText : '';
+  const handleEl = nameEl ? nameEl.querySelectorAll('span')[3] : null;
+  const handle = handleEl ? handleEl.innerText : '';
+
+  // Bio
+  const bioEl = document.querySelector('[data-testid="UserDescription"]');
+  const bio = bioEl ? bioEl.innerText : '';
+
+  // Location, website, join date — in the profile meta row
+  const metaItems = {};
+  document.querySelectorAll('[data-testid="UserProfileHeader_Items"] > span').forEach(span => {
+    const icon = span.querySelector('svg');
+    const text = span.innerText.trim();
+    if (!text) return;
+    const label = icon ? icon.getAttribute('aria-label') || '' : '';
+    // Identify by icon aria-label or link presence
+    if (span.querySelector('a[href]')) {
+      metaItems.website = span.querySelector('a').href;
+    } else if (label.toLowerCase().includes('location') || text.match(/^[A-Z][^@]/)) {
+      metaItems.location = text;
+    } else if (text.toLowerCase().includes('joined')) {
+      metaItems.joined = text.replace(/^joined\s*/i, '').trim();
+    }
+  });
+
+  // Follower / following counts
+  const followLinks = document.querySelectorAll('a[href$="/following"], a[href$="/followers"], a[href$="/verified_followers"]');
+  let following = '', followers = '';
+  followLinks.forEach(a => {
+    const count = a.querySelector('span[data-testid]')?.innerText || a.querySelector('span')?.innerText || '';
+    if (a.href.includes('/following')) following = count;
+    if (a.href.includes('/followers')) followers = count;
+  });
+
+  // Pinned tweet URL (first tweet marked as pinned)
+  const pinnedCtx = document.querySelector('[data-testid="socialContext"]');
+  let pinnedTweetUrl = '';
+  if (pinnedCtx && pinnedCtx.innerText.toLowerCase().includes('pinned')) {
+    const pinnedArticle = pinnedCtx.closest('article');
+    if (pinnedArticle) {
+      const link = pinnedArticle.querySelector('a[href*="/status/"]');
+      if (link) pinnedTweetUrl = 'https://x.com' + link.getAttribute('href');
+    }
+  }
+
+  // Avatar URL
+  const avatarImg = document.querySelector('a[href$="/photo"] img, [data-testid="UserAvatar-Container"] img');
+  const avatarUrl = avatarImg ? avatarImg.src : '';
+
+  return JSON.stringify({
+    display_name: displayName,
+    handle,
+    bio,
+    location: metaItems.location || '',
+    website: metaItems.website || '',
+    joined: metaItems.joined || '',
+    followers,
+    following,
+    pinned_tweet_url: pinnedTweetUrl,
+    avatar_url: avatarUrl,
+  });
+})()
+```
+
+Store as `profile` object. Include in Step 4 output.
+
+---
+
+## Step 4b — Scrape loop
 
 Run the extraction script below. Repeat the scroll-then-extract loop until you have `count` qualifying tweets OR you've scrolled 30 times without new results (give up with a warning).
 
@@ -193,7 +269,7 @@ Keep only the `count` most recent tweets (sorted by datetime descending) from `c
 
 ---
 
-## Step 4 — Build output
+## Step 5 — Build output
 
 Construct the final data structure:
 
@@ -205,13 +281,25 @@ Construct the final data structure:
     "tweet_count": {N},
     "filters_applied": ["no_retweets", "no_replies"]
   },
+  "profile": {
+    "display_name": "...",
+    "handle": "@...",
+    "bio": "...",
+    "location": "...",
+    "website": "...",
+    "joined": "...",
+    "followers": "...",
+    "following": "...",
+    "pinned_tweet_url": "...",
+    "avatar_url": "..."
+  },
   "tweets": [ ...sorted by datetime descending... ]
 }
 ```
 
 ---
 
-## Step 5 — Write file
+## Step 6 — Write file
 
 Save to: `{cwd}/{handle}_tweets_{YYYY-MM-DD}.json`
 
@@ -219,7 +307,7 @@ Use the Write tool. Confirm the path to the user.
 
 ---
 
-## Step 6 — Print summary table
+## Step 7 — Print summary table
 
 Print a compact summary so the user can spot-check:
 
