@@ -9,6 +9,13 @@ Handles everything needed to get a PR into mergeable state: review comments, CI 
 
 Use GitHub MCP tools for all GitHub data access. Prefer them over `gh` CLI — fall back to `gh` only if MCP tools are unavailable.
 
+If any `gh` or GitHub MCP call fails with a permission or "not found" error, check the active account before assuming the repo doesn't exist:
+```bash
+gh auth status
+gh auth switch  # then retry the failing command
+```
+Only do this on failure — don't proactively switch accounts on every run.
+
 ---
 
 ## Workflow
@@ -170,9 +177,34 @@ Rules:
 3. Run relevant tests
 4. **Ask for approval**: *"I've made these changes. Should I commit and push?"*
 5. Wait for explicit confirmation (`"yes"`, `"do it"`, `"push it"`)
-6. Commit with a descriptive message, push — GitHub triggers CI
+6. Commit with a descriptive message — **verify `git status` is clean before pushing**. Do **not** add Claude as a co-author in commit messages.
+7. Push — GitHub triggers CI
+8. **Resolve addressed threads** (see below)
 
 Never skip the approval gate. You may have misunderstood the intent, made a logic error, or missed an edge case.
+
+#### After pushing — resolve threads
+
+Resolve every thread whose concern is addressed in code via GraphQL. Many CI validators are thread-resolution-driven (not just check-run-driven), so unresolved threads can block CI even when the code is correct:
+
+```bash
+gh api graphql -f query='mutation { resolveReviewThread(input: {threadId: "PRRT_..."}) { thread { isResolved } } }'
+```
+
+Collect all thread IDs from the GraphQL `reviewThreads` query (Step 3B) and resolve them in a loop after pushing.
+
+#### Reply policy for review threads
+
+**Only post a reply when the reviewer asked something requiring a textual response** — design tradeoffs, naming decisions, architectural proposals, security concerns.
+
+**Do not reply** for:
+- Type annotation fixes — the diff is the reply
+- TODOs added to code — the TODO is the reply
+- Dead code removed, renamed, restructured — the diff is the reply
+
+Unnecessary replies add noise. The code change is the answer.
+
+**When posting replies**: you are writing as the PR author/reviewer. Never refer to the user in third person (e.g. don't say "akshat flagged this" if you are posting as akshat). Write as if you are them.
 
 ---
 
@@ -186,6 +218,9 @@ Never skip the approval gate. You may have misunderstood the intent, made a logi
 | Mandatory item in PR body not present in template | Bot (eightfoldbot) injected extra mandatory items when it edited the body | Compare body vs template bidirectionally; bot-added items are still enforced |
 | CI breaks after updating PR body via MCP | HTML entity encoding (`&#39;`, `&amp;`) | Always decode entities before updating; use plain characters |
 | `url mismatch` in checklist validation | URL copied from MCP response (may be truncated) | Copy URL byte-for-byte from local `.github/PULL_REQUEST_TEMPLATE.md` |
+| 422 on `gh api` with `in_reply_to` | `-f` sends strings; numeric fields need `-F` | Use `-F in_reply_to=<id>` (capital F) for integer fields in `gh api` |
+| Push succeeds but PR shows no new commits | Changes weren't committed before pushing | Always check `git status` is clean before `git push` |
+| CI still blocked after pushing code fixes | Addressed threads not resolved | Resolve each thread via GraphQL `resolveReviewThread` mutation after pushing |
 
 ---
 
