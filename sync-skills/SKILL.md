@@ -9,11 +9,13 @@ Commit any changes in `~/.claude/skills/` and push to `git@github-personal:aksha
 
 ## Steps
 
-**1. Pull rebase from main**
+**1. Stash, pull rebase, pop — single command**
 ```bash
-git -C ~/.claude/skills pull --rebase
+git -C ~/.claude/skills stash --include-untracked; git -C ~/.claude/skills pull --rebase; git -C ~/.claude/skills stash pop 2>/dev/null || true
 ```
-- If this fails (conflicts or error): report the error and stop. Do not proceed with commit.
+- `stash --include-untracked` preserves both modified tracked files and new untracked skill files before the pull.
+- `stash pop` is silenced (`2>/dev/null || true`) so it doesn't fail when there was nothing to stash.
+- If `pull --rebase` reports conflicts: report the error and stop. Do not proceed with commit.
 
 **2. Stage all changes**
 ```bash
