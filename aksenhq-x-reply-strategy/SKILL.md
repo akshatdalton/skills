@@ -45,133 +45,115 @@ Detect mode automatically from what the user shares. If ambiguous, ask.
 
 ## Workflow
 
-Run these stages in order.
+```
+DECODE → ANGLES → CONTRIBUTE → DRAFT → LINE EDIT (optional)
+```
+
+Human’s specific input comes BEFORE the draft is generated, not after. Draft generation is the output of human decisions, not a thing to react to and fix.
 
 ---
 
-### Stage 1 — Decode the Tweet
+### Stage 1 — Decode
 
-Before generating any angles, deeply read the tweet and surface:
+Read the tweet and output exactly 3 lines:
 
-**1. What it's really arguing (vs. what it literally says)**
-Strip the framing. What's the actual claim underneath the words?
-- Literal: "networking became a requirement to get a job"
-- Real argument: "merit-based hiring is a myth; access is the real filter"
+```
+Real argument: [what it’s actually claiming, stripped of framing]
+Gap: [what’s missing, debatable, or left open]
+Reply signal: [viral-adjacent / niche signal / cold] + [post age] + [why worth replying or not]
+```
 
-**2. What emotional trigger it's using**
-Pick the primary one:
-- Validation ("finally someone said it")
-- Mild outrage ("this is unfair / broken")
-- Curiosity ("I didn't know this")
-- Aspiration ("I want this")
-- Fear ("this could happen to me")
-- Contrarian satisfaction ("everyone else is wrong")
+- **Viral-adjacent**: 50K+ account, traction, broad topic → high piggyback upside, timing matters
+- **Niche signal**: mid-size builder/indie account → quality engagement, follow-back rate
+- **Cold**: small account, no traction → flag it: “low piggyback upside — consider saving this angle for an original post”
 
-**3. What's debatable or missing from the take**
-What would a thoughtful person push back on? What assumption is baked in? What's the tweet leaving out that would change the conclusion?
-
-**4. Distribution potential**
-- **Viral-adjacent**: posted by large account (50K+), already gaining traction, broad-appeal topic → high piggyback upside, reply early
-- **Niche signal**: mid-size account, builder/indie/tech topic → lower impressions ceiling but higher quality engagement and follow-back rate
-- **Cold**: small account, no traction → low ROI for a reply; note this to the user
-
-**5. Who the audience likely is**
-What kind of person follows this account and would see your reply? Their identity matters — a reply that lands with devs reads differently to founders or marketers.
+If cold, stop and let the user decide whether to continue.
 
 ---
 
-### Stage 2 — Generate Angles
+### Stage 2 — Surface Angles
 
-Proceed directly to angles after the decode. Do not wait for or ask for the user’s stance.
-
-**If the user provides a stance** alongside the tweet (e.g. “I think this is overstated”) — anchor every angle to that specific tension. It makes the output sharper and more personal.
-
-**If no stance is given** — generate angles from what’s debatable or missing in the decode. The user can always add their take after seeing the angles and iterate from there.
-
----
-
-### Stage 3 — Generate Angles
-
-Using the Stage 1 decode, generate angles from the tweet's actual content — not generic templates applied to the topic. Each angle must be *derived from something specific in the tweet*, not retrofitted.
+Generate 3 angles from the tweet’s actual content. Each angle is a **direction**, not a draft. 2 lines max per angle.
 
 **The 7 angle types:**
 
 | Type | What it does | When it works best |
 |------|-------------|-------------------|
-| **Domain reframe** | Maps the tweet's insight to your niche (X growth / indie building) | When there's a direct structural parallel |
+| **Domain reframe** | Maps the tweet’s insight to your niche (X growth / indie building) | When there’s a direct structural parallel |
 | **Personal data point** | Grounds the take in your lived experience — a number, outcome, or specific scenario | When the tweet makes a general claim you can make specific |
-| **Mild provocation** | Validates the tweet in one clause, then makes it slightly uncomfortable | When the tweet is right but incomplete — there's a sharper version |
-| **Terminology correction** | Redefines a word or phrase the tweet used lazily | When the tweet's framing is doing work it shouldn't |
+| **Mild provocation** | Validates the tweet in one clause, then makes it slightly uncomfortable | When the tweet is right but incomplete — there’s a sharper version |
+| **Terminology correction** | Redefines a word or phrase the tweet used lazily | When the tweet’s framing is doing work it shouldn’t |
 | **Question disguised as a statement** | Poses an implicit question through a declarative observation | When the tweet leaves an obvious gap people will want to fill |
 | **Specific contrast / numbers** | Makes the abstract concrete with a real comparison or stat | When the tweet is vibes-only and a number would land harder |
-| **Extrapolated view** | Takes the tweet's premise, extends it one step further into a different domain or conclusion that reframes the whole thing | When the tweet is right as far as it goes, but there's a more interesting adjacent truth hiding behind it |
+| **Extrapolated view** | Takes the tweet’s premise, extends it one step further into a different domain or conclusion | When the tweet is right as far as it goes, but there’s a more interesting adjacent truth behind it |
 
-**For each angle generated:**
-- State the angle type
-- One sentence on *why this specific tweet unlocks this angle*
-- Draft the reply (applying aksenhq-x-brand-voice rules: lowercase, no trailing punctuation, line breaks not periods between thoughts)
-
----
-
-### Stage 4 — Rank by Engagement Potential
-
-Score each angle on:
-- **Impression potential** — will this stop a scroll? does it create enough tension to make someone pause?
-- **Reply-bait** — does it invite a response, pushback, or question?
-- **Brand fit** — does it reinforce the @aksenHQ positioning (builder, X growth practitioner, solopreneur)?
-- **Authenticity ceiling** — can this be backed with real experience, or does it read like it was generated?
+**Rank by:**
+- Authenticity ceiling — can this be backed with real experience, or does it read generated?
+- Reply-bait — does it invite pushback or a specific response?
+- Brand fit — does it reinforce @aksenHQ positioning (builder, X growth practitioner, solopreneur)?
 
 **Output format:**
-
-**Reply Mode output:**
 ```
-🥇 TOP ANGLE — [Type]
-Why this tweet unlocks it: [one line]
-Draft: [reply text]
-Why it works: [one line — the engagement mechanic]
-Stress-test: [one honest concern about this angle — is anything overclaimed? does it land without context?]
+1. [Type] — [what this angle does in this specific tweet, one line]
+   Direction: [the move — what the reply would do, not what it would say]
+
+2. [Type] — [one line]
+   Direction: [the move]
+
+3. [Type] — [one line]
+   Direction: [the move]
+```
+
+**End with one line only:**
+`Pick one (1/2/3) + drop your specific detail — what from your experience makes this real?`
+
+Do NOT draft until the user responds. Do NOT ask follow-up questions. Wait.
 
 ---
 
-OTHER ANGLES (ranked):
+### Stage 3 — Draft
 
-2. [Type] — [one-line summary]
-Draft: [reply text]
+User has picked an angle AND provided their specific detail (or confirmed to proceed without one).
 
-3. [Type] — [one-line summary]
-Draft: [reply text]
+Generate the reply with:
+- Human’s specific detail integrated from the first word — not grafted on after
+- Brand voice applied inline (lowercase, hyphens not em dashes, no trailing punctuation, no emojis, line breaks between thoughts, never start with “I”)
+- Humanizer constraints applied (no AI tells: no uniform sentence structure, no transitional overload, no abstract closers, no “is the signal” type slogans)
 
-[continue for remaining angles worth including — drop any that feel generic or weak after the decode]
+**Stress-test before outputting:**
+- Overclaiming? (needs receipts the user doesn’t have)
+- Too closed? (complete thought with no engagement hook)
+- Generic risk? (could anyone have written this, or does it signal @aksenHQ’s domain clearly)
+- False parallel? (if it’s a reframe, does it actually hold)
+
+If a flag is raised, note it in one line after the draft. Do not silently fix it.
+
+**Output format:**
+```
+[reply text]
+
+Stress-test: [flag if any, otherwise omit this line entirely]
 ```
 
 ---
 
-### Stage 5 — Stress-Test (Top Angle Only)
+### Stage 4 — Line Edit (Optional)
 
-Before presenting the top angle as final, run one honest check:
-
-- **Overclaiming?** Does the draft make a claim that needs receipts you don't have?
-- **Too closed?** Does it deliver a complete thought with no hook left for engagement?
-- **Generic risk?** Could this have been written by anyone, or does it clearly signal @aksenHQ's domain?
-- **False parallel?** If it's a reframe or comparison, does the parallel actually hold logically?
-
-If any flag is raised, note it clearly in the `Stress-test:` field. Do not silently fix it — surface it so the user can decide.
+Only if user flags a specific line. Present 2-3 alternatives for that line only. No full rewrites unless asked.
 
 ---
 
 ## Usage Notes
 
-**This skill + aksenhq-x-brand-voice together**
-This skill handles what to say. The voice skill handles how it looks (formatting, vocabulary, tone constants). When generating drafts within this skill, apply the voice rules automatically — don't wait for a separate pass.
+**Brand voice is not a separate pass.** Apply aksenhq-x-brand-voice rules inside Stage 3. The draft should be post-ready on arrival — not requiring a correction round.
 
-**When distribution potential is low**
-If the tweet is from a small account with no traction, flag it: "this tweet has low piggyback upside — might be worth saving the angle for an original post instead." Give the user the option.
+**Humanizer is not a separate pass.** Apply humanizer constraints inside Stage 3. If it needs a humanizer check after drafting, the draft wasn’t good enough.
 
-**When the user has personal context to add**
-After presenting angles, always invite: "if you have a specific data point or experience that maps to any of these, drop it — I can sharpen the draft around the real detail." The best replies are ones where the human fills in the lived-experience gap that makes the AI draft feel real.
+**When distribution potential is low.** If the tweet is cold (Stage 1), flag it before generating angles. Give the user the option to continue or save the angle for an original post.
 
-**The goal is non-generic**
-A reply passes the bar if: a) it could only have come from someone in the builder/X growth/solopreneur world, and b) it says something the original tweet didn't. If a draft fails either test, discard it and try a different angle.
+**The goal is non-generic.** A reply passes the bar if: a) it could only have come from someone in the builder/X growth/solopreneur world, and b) it says something the original tweet didn’t. If a draft fails either test, discard and try a different angle.
+
+**If user skips providing specific detail.** Draft anyway using the strongest inference from their known context (building MagnetX on Claude, @aksenHQ, early X growth phase, AI-as-copilot stance). Note what was inferred.
 
 ---
 
