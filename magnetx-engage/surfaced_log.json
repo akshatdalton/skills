@@ -1,0 +1,73 @@
+{
+  "description": "Tracks tweet IDs and accounts already surfaced in daily sessions. Never repeat these.",
+  "surfaced_posts": [
+    {
+      "date": "2026-04-12",
+      "tweet_id": "2041776509078417423",
+      "handle": "yongfook",
+      "url": "https://x.com/yongfook/status/2041776509078417423",
+      "replied": true,
+      "reply_text": "there's a type 3 - deep in claude code, no paying customer anywhere\n\nthe tool doesn't pick the problem\npoint it at something real and yeah, it runs while you sleep"
+    },
+    {
+      "date": "2026-04-12",
+      "tweet_id": "2040549497848131772",
+      "handle": "arvidkahl",
+      "url": "https://x.com/arvidkahl/status/2040549497848131772"
+    },
+    {
+      "date": "2026-04-12",
+      "tweet_id": "2043320100397199422",
+      "handle": "levelsio",
+      "url": "https://x.com/levelsio/status/2043320100397199422"
+    }
+  ],
+  "replied_posts": [
+    {
+      "date": "2026-04-13",
+      "tweet_id": "2042987756251734367",
+      "handle": "zenorocha",
+      "url": "https://x.com/zenorocha/status/2042987756251734367",
+      "reply_text": "pending"
+    },
+    {
+      "date": "2026-04-12",
+      "tweet_id": "2043370936318181676",
+      "handle": "craigzLiszt",
+      "url": "https://x.com/craigzLiszt/status/2043370936318181676",
+      "reply_text": "the million isn't the hard part\n\nmost founders are still figuring out distribution - once that clicks, it's the same loop on repeat\nthe first 10 customers teach you how to sell. that's it. that's the whole thing."
+    },
+    {
+      "date": "2026-04-12",
+      "tweet_id": "2043384006931067019",
+      "handle": "forgebitz",
+      "url": "https://x.com/forgebitz/status/2043384006931067019",
+      "reply_text": "agents are great for daily execution - no template, just get it done\n\nin prod it's different. when the same error hits 10 users in a row, you need a dev to trace exactly where it broke\n\"control\" is just the polite word for that"
+    },
+    {
+      "date": "2026-04-12",
+      "tweet_id": "2043380177221357790",
+      "handle": "garrytan",
+      "url": "https://x.com/garrytan/status/2043380177221357790",
+      "reply_text": "staying above the api line is the right call\n\nvoice is still rented though - gemini today, probably something else in 3 months\nthe dependency just moves lower"
+    },
+    {
+      "date": "2026-04-12",
+      "tweet_id": "2043381737754120592",
+      "handle": "rauchg",
+      "url": "https://x.com/rauchg/status/2043381737754120592",
+      "reply_text": "most founders put their friendliest customers in these chats, not the demanding ones - that's where the useful feedback dies\n\nengineering side is the same\nyour most demanding users need your sharpest engineers in there, not whoever's free to face the music"
+    },
+    {
+      "date": "2026-04-12",
+      "tweet_id": "2041776509078417423",
+      "handle": "yongfook",
+      "url": "https://x.com/yongfook/status/2041776509078417423",
+      "reply_text": "there's a type 3 - deep in claude code, no paying customer anywhere\n\nthe tool doesn't pick the problem\npoint it at something real and yeah, it runs while you sleep"
+    }
+  ],
+  "skipped_accounts": [
+    { "handle": "tommynormn", "reason": "account does not exist", "date": "2026-04-12" },
+    { "handle": "craighewitt", "reason": "wrong person — photographer, not the bootstrapped founder", "date": "2026-04-12" }
+  ]
+}

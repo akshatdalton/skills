@@ -56,15 +56,22 @@ If the rebase produces conflicts:
 
 #### A. Failing CI checks
 
-Fetch check runs for the PR via GitHub MCP. Look for `conclusion: "FAILURE"` or `conclusion: "ACTION_REQUIRED"`. Common failures: test suites, linters (mypy, ruff, pylint), type checkers, checklist validation.
+Make **two** GitHub MCP calls — both are required every time:
 
-**`get_check_runs` only covers GitHub Actions — it is blind to bot-comment-driven validators.**
-Bot-based checklist validators (e.g. eightfoldbot) post their results as issue comments, not as check runs. A PR can show all check runs green while still having a failing checklist validation. **Always scan `get_comments` for bot messages containing "CHECKLIST VALIDATION ERRORS" or "Mandatory field not checked"**, regardless of what `get_check_runs` reports.
+1. **`get_check_runs`** — GitHub Actions workflows. Look for `conclusion: "failure"` or `conclusion: "action_required"`.
+2. **`get_status`** — External CI commit statuses (e.g. Eightfold's internal CI: "CI Test Suite", "Requisites", "Pytest", "Mypy", etc.). Look for `state: "failure"`. This is the source of truth for what appears in the GitHub PR merge box ("Some checks were not successful"). **`get_check_runs` will be entirely green while `get_status` shows 4 failing checks — always call both.**
+
+Common failures across both: test suites, linters (mypy, ruff, pylint), type checkers, requirements/requisites, checklist validation.
+
+**`get_check_runs` and `get_status` are both blind to bot-comment-driven validators.**
+Bot-based checklist validators (e.g. eightfoldbot) post their results as issue comments, not as check runs or statuses. A PR can show all checks green while still having a failing checklist validation. **Always scan `get_comments` for bot messages containing "CHECKLIST VALIDATION ERRORS" or "Mandatory field not checked"**, regardless of what the other two calls report.
 
 **If logs require authentication** (internal CI tools, private S3 buckets, etc.):
 - **STOP** — ask the user: *"I need access to the CI logs to diagnose this. Can you paste the log contents from [URL]?"*
 - Do not guess or proceed without the actual errors
 - Once provided, determine if failures are in your changed files or inherited from the base branch
+
+**`stage.eightfold.ai/internal/s3viewer` URLs always require authentication** — WebFetch will be rejected. For every failing commit status with a `target_url` pointing to `stage.eightfold.ai`, paste the URL in the session and ask the user to open it and paste the log contents.
 
 #### B. Unresolved review comments
 
@@ -214,6 +221,7 @@ Unnecessary replies add noise. The code change is the answer.
 |---|---|---|
 | Checklist re-validation not triggered | PR body updates don't auto-trigger CI | Add `needs_ci` comment |
 | "Mandatory field not checked" despite item being checked | Duplicate item — one checked, one unchecked | Compare with template, remove unchecked duplicate, add `needs_ci` |
+| All `get_check_runs` green but PR merge box shows failures | External CI uses commit statuses (`get_status`), not GitHub Actions — `get_check_runs` is blind to these | Always call `get_status` alongside `get_check_runs`; look for `state: "failure"` entries |
 | All `get_check_runs` green but checklist validation still failing | Bot-driven checklist validator posts results as issue comments, not check runs | Scan `get_comments` for bot messages with "CHECKLIST VALIDATION ERRORS" |
 | Mandatory item in PR body not present in template | Bot (eightfoldbot) injected extra mandatory items when it edited the body | Compare body vs template bidirectionally; bot-added items are still enforced |
 | CI breaks after updating PR body via MCP | HTML entity encoding (`&#39;`, `&amp;`) | Always decode entities before updating; use plain characters |

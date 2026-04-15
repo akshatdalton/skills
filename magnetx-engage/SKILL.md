@@ -27,25 +27,64 @@ This skill surfaces the *what* (which accounts to engage with, what angles to ex
 
 **Command:** `/magnetx-engage` (no arguments)
 
-**Purpose:** Morning habit kickstart. Surface 5 posts from your target accounts that are high-intent engagement targets.
+**Purpose:** Morning habit kickstart. Surface 5 posts from your target accounts that are high-intent engagement targets for immediate reply.
 
-### Workflow
+### Critical: Reply Within the First 1-2 Hours
 
-1. **Read accounts.json** from `~/.claude/skills/magnetx-engage/accounts.json`
-2. **Scrape recent tweets** (last 15 tweets from each account) using the `scrape-x-profile` skill
-3. **Calculate per-account metrics:**
-   - **Engagement rate** = (likes + replies + retweets) / impressions, averaged across last 15 tweets
-   - **Reply-back signal** = % of recent posts where replies > 0 (shows whether account engages back)
-   - **Peak posting hour** = most frequent hour in tweet timestamps (UTC)
-4. **Rank accounts** by:
-   - Engagement rate (higher is better)
-   - Reply-back signal (higher is better — accounts that reply back are worth engaging)
-   - Recency (newer posts > older posts)
-5. **Surface top 5 posts** to engage with:
-   - Post text + URL
-   - Account info (handle, followers, engagement rate)
-   - Why this post (engagement signal + account engagement history)
-   - Suggested reply angle (brief 1-line thinking starter, not a draft)
+Replies to posts older than 2 hours have near-zero distribution value. The goal is to reply while the post still has momentum — algorithmic and social. **Recency is the primary filter.**
+
+### Preferred Approach: Live Timeline Scan
+
+Scan the X home timeline directly for fresh posts from target accounts rather than scraping profiles (which surfaces posts from days ago).
+
+**Step 1 — Open X timeline**
+
+Navigate to x.com/home in Chrome. The timeline will contain posts from accounts the user follows. Most of these will be from niche-relevant accounts.
+
+**Step 2 — Extract posts from timeline (JS injection)**
+
+Use `javascript_tool` to extract tweet articles from the DOM. For each tweet:
+- Extract: text, handle, timestamp (datetime attribute), likes, replies, retweets, URL
+- Filter ads: tweet articles with no datetime attribute are ads — skip them
+- Deduplicate using a seen Set on tweet IDs
+
+Scroll the timeline 2-3 times to load more posts. Re-run extraction after each scroll.
+
+**Step 3 — Filter by recency**
+
+Keep only posts posted within the last 2 hours. Discard everything older.
+
+**Step 4 — Cross-reference accounts.json**
+
+From the fresh posts, prioritize handles that appear in `~/.claude/skills/magnetx-engage/accounts.json`. Non-list accounts can be included if they're niche-relevant (builder/founder/product/AI/X growth topics).
+
+**Step 5 — Cross-reference surfaced_log.json**
+
+Check `~/.claude/skills/magnetx-engage/surfaced_log.json`. Skip any tweet IDs or handles already in `surfaced_posts` or `replied_posts`.
+
+**Step 6 — Score and rank fresh posts**
+
+For each qualifying post:
+- **Engagement rate** = `(likes + replies + retweets) / max(views, 1)` (if views available)
+- **Reply count signal** = replies > 0 → shows tweet is sparking conversation
+- **Recency bonus** = posts under 30 min score higher than 30–120 min
+
+**Step 7 — Surface top 5 posts**
+
+Apply **Post Filtering Rule** (see below) — skip memes, off-niche, no-argument content.
+Stop when 5 qualifying posts found.
+
+**Step 8 — Output**
+
+Format and display using the output format below.
+
+### Fallback: Profile Scrape (if timeline is sparse)
+
+If the timeline yields fewer than 5 qualifying posts (e.g., off-peak hours, no activity), fall back to profile scraping:
+
+For each account in accounts.json, invoke `/scrape-x-profile @{handle} 15`. Same recency filter applies — only surface posts from the last 2 hours. If none qualify, skip that account.
+
+> Scraper output format: each tweet has `metrics: { replies, retweets, likes, bookmarks, views }` (nested).
 
 ### Output Format
 
@@ -54,25 +93,25 @@ This skill surfaces the *what* (which accounts to engage with, what angles to ex
 
 ---
 
-1. [@handle] — [N followers, [engagement rate]]
+1. [@handle] — [post age] — [likes/replies/retweets]
    📄 Post: [quote of post text, first 100 chars]
    🔗 [URL to tweet]
-   Why: This account has [X%] reply-back rate. Post has [Y] replies (strong signal they engage).
-   Angle to explore: [One-line thinking starter, e.g., "the tooling gap they're pointing at"]
+   Why: [one-line reason — reply count, engagement signal, niche fit]
+   Angle to explore: [One-line thinking direction]
 
 [repeat for posts 2-5]
 
 ---
 
-⏱️ Account scores: [breakdown of engagement rates used to rank]
+⏱️ Session: [N posts scanned, N qualified, N skipped (logged)]
 ```
 
 ### Notes
 
-- **Always include the tweet URL** so user can click directly
+- **Always include the tweet URL** — every single time, no exceptions
 - **Suggested angle is NOT a draft** — it's a thinking direction, not a reply
-- **If an account recently got engagement from @aksenHQ already**, note it (save mental state if possible)
-- **Peak posting hours are informational** — useful for scheduling replies if user wants to engage live
+- **Refresh timeline between replies** — scroll and re-scan to catch newer posts during the session
+- **After surfacing**, proceed directly into Mode 2 for each post the user picks
 
 ---
 
@@ -122,15 +161,32 @@ Mode 2 runs the aksenhq-x-reply-strategy pipeline. Human's specific input comes 
 DECODE → ANGLES → CONTRIBUTE → DRAFT → LINE EDIT (optional)
 ```
 
-**Step 1 — Decode (3 lines):**
-Real argument / Gap / Reply signal (viral-adjacent | niche | cold + post age). If cold, flag and let user decide.
+**Step 0 — Search before decode (MANDATORY when tweet references a product, project, or person by name):**
+Run WebSearch for `[product/project/person name] + context`. Never decode blind. The @garrytan/GBrain incident: decoded without knowing GBrain was Garry's own open-source personal AI memory system — all 3 angles were wrong. One search would have fixed it.
 
-**Step 2 — Surface 3 angles as directions:**
-No drafts. Each angle = 2 lines: angle type + what the move is. End with:
-`Pick one (1/2/3) + drop your specific detail — what from your experience makes this real?`
+**Step 1 — Decode + Angles in one output (Steps 1+2 together):**
+Output decode block immediately followed by the 3 angles. Do NOT stop after decode and wait. User preference: surface the full picture at once.
+
+Format:
+```
+Real argument: [one line]
+Gap: [one line]
+Reply signal: [viral-adjacent | niche | cold] + [post age] + [why worth replying]
+🔗 [tweet URL]
+```
+Then immediately surface 3 angles (directions, not drafts). End with recommended angle + one-line reason.
+
+Cold signal = flag it in the signal line, then continue to angles anyway. Do NOT stop and ask.
+
+**Step 2 — Recommend an angle:**
+After surfacing all 3, always state: `Recommended: [1/2/3] — [one-line reason]`. Never make the user ask for a recommendation.
 
 **Step 3 — Draft:**
-After user picks + contributes their specific detail. Draft generated with that detail integrated from the first word. Brand voice + humanizer constraints applied inline — not as separate passes. Stress-test embedded in the output.
+After user picks + contributes their specific detail.
+
+- 3a: Write draft with detail integrated from the first word. Brand voice applied inline.
+- 3b: Run humanizer audit internally before outputting — ask "what makes this obviously AI-generated?" and fix it. Check: uniform rhythm, em dashes, abstract closers, slogan parallelism, transitional overload. Only show the reply after it passes.
+- 3c: Stress-test (overclaiming / too closed / generic / false parallel). Note any flag in one line after the draft.
 
 **Step 4 — Line edit (optional):**
 User flags one line → 2-3 alternatives for that line only.

@@ -53,27 +53,34 @@ Human’s specific input comes BEFORE the draft is generated, not after. Draft g
 
 ---
 
-### Stage 1 — Decode
+### Pre-Stage — Context Research (MANDATORY when tweet names a product, project, or person)
 
-Read the tweet and output exactly 3 lines:
+Before decoding: if the tweet references any named product, project, tool, or unfamiliar person — run a WebSearch for `[name] + brief context`. One search prevents an entire decode built on the wrong foundation.
+
+Lesson: Decoding @garrytan’s GBrain tweet without knowing what GBrain was produced three wrong angles. A single search would have revealed it’s Garry’s own open-source personal AI memory system — completely changes the real argument and what gaps exist.
+
+---
+
+### Stage 1 — Decode + Stage 2 — Surface Angles (output both together)
+
+Output the decode block and all 3 angles in a single response. Do NOT pause after decode and wait. User preference: surface the full picture at once.
+
+**Decode block (3 lines):**
 
 ```
 Real argument: [what it’s actually claiming, stripped of framing]
 Gap: [what’s missing, debatable, or left open]
 Reply signal: [viral-adjacent / niche signal / cold] + [post age] + [why worth replying or not]
+🔗 [tweet URL — always include, no exceptions]
 ```
 
 - **Viral-adjacent**: 50K+ account, traction, broad topic → high piggyback upside, timing matters
 - **Niche signal**: mid-size builder/indie account → quality engagement, follow-back rate
-- **Cold**: small account, no traction → flag it: “low piggyback upside — consider saving this angle for an original post”
+- **Cold**: small account, no traction → note it in signal line, then continue to angles anyway. Flag = info, not a stop.
 
-If cold, stop and let the user decide whether to continue.
+**Angles (3 directions, not drafts):**
 
----
-
-### Stage 2 — Surface Angles
-
-Generate 3 angles from the tweet’s actual content. Each angle is a **direction**, not a draft. 2 lines max per angle.
+Each angle is a **direction**, not a draft. 2 lines max per angle.
 
 **The 7 angle types:**
 
@@ -102,12 +109,12 @@ Generate 3 angles from the tweet’s actual content. Each angle is a **direction
 
 3. [Type] — [one line]
    Direction: [the move]
+
+Recommended: [1/2/3] — [one-line reason why this angle fits best here]
+Pick one (1/2/3) + drop your specific detail — what from your experience makes this real?
 ```
 
-**End with one line only:**
-`Pick one (1/2/3) + drop your specific detail — what from your experience makes this real?`
-
-Do NOT draft until the user responds. Do NOT ask follow-up questions. Wait.
+Always end with a recommendation. Never make the user ask for it. Do NOT draft until the user responds.
 
 ---
 
@@ -115,12 +122,22 @@ Do NOT draft until the user responds. Do NOT ask follow-up questions. Wait.
 
 User has picked an angle AND provided their specific detail (or confirmed to proceed without one).
 
-Generate the reply with:
+**Step 3a — Write draft:**
 - Human’s specific detail integrated from the first word — not grafted on after
 - Brand voice applied inline (lowercase, hyphens not em dashes, no trailing punctuation, no emojis, line breaks between thoughts, never start with “I”)
-- Humanizer constraints applied (no AI tells: no uniform sentence structure, no transitional overload, no abstract closers, no “is the signal” type slogans)
 
-**Stress-test before outputting:**
+**Step 3b — Humanizer audit (mandatory, internal, never shown to user):**
+Run the full humanizer checklist against the draft before outputting. Ask internally: “What makes this obviously AI-generated?” Fix anything that fails:
+- Uniform sentence rhythm → vary it
+- Em dashes → hyphens or restructure
+- Abstract closer (“X is the signal”, “that’s the whole thing”) → cut or make concrete
+- Transitional overload (“additionally”, “ultimately”) → remove
+- Preachy completeness → leave some edges open
+- Slogan-like parallelism → break the symmetry
+
+Only output the reply after it passes.
+
+**Step 3c — Stress-test:**
 - Overclaiming? (needs receipts the user doesn’t have)
 - Too closed? (complete thought with no engagement hook)
 - Generic risk? (could anyone have written this, or does it signal @aksenHQ’s domain clearly)
