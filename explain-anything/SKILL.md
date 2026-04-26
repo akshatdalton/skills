@@ -5,114 +5,120 @@ description: Explain any reference as a zero-context story with citations and ca
 
 # Explain Anything
 
-Explain any reference as a **story that builds from zero context** — not a technical dump. Think senior dev explaining to a first-week intern.
+Explain as **story from zero context** — senior dev to first-week intern.
 
-This skill runs on the same decode/encode duality as `create-tech-doc`:
-
-- **Decode (top → down)**: traverse the source breadth-first — start at the root (what is this system?) before descending into specifics (what broke, why, what's the fix). Never jump into depth before the parent level is understood.
-- **Encode (bottom → up)**: build the explanation chapter by chapter, each one earning the next. Never deliver a chapter until the prior one is solid. Assemble the full story only once all pieces are clear.
-
-The story arcs below are the decode map. The "each chapter earns the next" rule is the encode constraint.
+Decode/encode duality:
+- **Decode (top → down)**: breadth-first from root. Never depth before parent understood.
+- **Encode (bottom → up)**: chapter by chapter, each earning the next.
 
 ---
 
-## Step 1 — Fetch the source first
+## Step 1 — Fetch source first
 
-Always retrieve the content before explaining. Never guess from partial text in the chat.
+Always retrieve before explaining. Never guess.
 
 | Source type | How to fetch |
 |---|---|
-| Jira ticket / URL | Atlassian MCP tools (`getJiraIssue`) |
-| GitHub PR / issue | GitHub MCP tools |
+| Jira ticket | Atlassian MCP (`getJiraIssue`) |
+| GitHub PR/issue | GitHub MCP tools |
 | Sentry error | Sentry MCP tools |
-| Any URL (blog, doc, Slack archive, tweet) | `WebFetch` / `curl` |
-| Local file in codebase | `Read` the file path directly |
+| PR code flows | GitHub MCP + `code-review-graph` MCP (`detect_changes_tool`, `get_affected_flows_tool`) |
+| PR diff (raw) | `gh pr diff <number>` |
+| Any URL | `WebFetch` / `curl` |
+| Local file | `Read` directly |
+
+**PR explanation:** Don't rely solely on diff. Use `code-review-graph` MCP for surrounding flows — confirms against actual runtime paths.
 
 ---
 
-## Step 2 — Pick the right story arc
+## Step 2 — Pick story arc
 
-### Arc A — Bugs, errors, and incidents
+### Arc A — Bugs, errors, incidents
+1. **What is this system?** — 1-2 lines, zero assumed context
+2. **Happy path?** — what code does when nothing wrong
+3. **What broke?** — observable symptom + trigger
+4. **Why?** — root cause traced through code
+5. **Fix / expected?** — what changes and why
 
-Use when the source is a Sentry error, a failing CI check, an incident report, or a bug ticket.
+Each chapter earns the next. Never jump to root cause without establishing "normal".
 
-1. **What is this feature/system?** — 1–2 lines, zero assumed context
-2. **What is the happy path?** — what the code does when nothing is wrong
-3. **What broke and when?** — observable symptom and trigger condition
-4. **Why does it break?** — root cause traced through the code
-5. **What is the fix / what is expected?** — what changes and why it restores correctness
+### Arc B — Design docs, RFCs, LLDs, PRs
+1. **Problem?** — pain that motivated this
+2. **State before?** — limitation, gap
+3. **Change?** — solution at high level
+4. **How?** — mechanism, key decisions, data flow
+5. **Trade-offs?** — limitations, deferred decisions, risks
 
-Each chapter earns the next. Never jump to root cause without establishing "normal" first. Never jump to solutions without establishing context first.
+Don't explain mechanism before reader understands problem.
 
----
-
-### Arc B — Design docs, RFCs, LLDs, feature tickets, PRs
-
-Use when the source is describing something new being built or proposed.
-
-1. **What problem does this solve?** — the pain that motivated this, in plain terms
-2. **What was the state before?** — existing system, current limitation, or gap
-3. **What is the proposed/implemented change?** — the solution at a high level
-4. **How does it work?** — mechanism, key design decisions, data flow
-5. **What are the trade-offs or open questions?** — limitations, deferred decisions, risks called out
-
-Each chapter earns the next. Don't explain the mechanism before the reader understands the problem it's solving.
+### Arc C — Shareable summary (handoff)
+Use when "explain so I can tell someone", Slack/standup summary.
+1. **TL;DR** — 3-5 sentences, copy-pasteable
+2. **Full breakdown** — Arc A or B
 
 ---
 
 ## Step 3 — Cite everything
 
-Every claim needs a reference. No unsourced assertions.
+Every claim needs reference. No unsourced assertions.
 
-- **Code citations** — `startLine:endLine:filepath` — include the snippet inline so the user can navigate directly
-- **Direct quotes** from the source — attribute clearly: *Jira ENG-12345:*, *GitHub PR #890:*, *Sentry event abc123:*
-- **MCP-fetched fields** (status, assignee, priority, stack trace) — call out the field name
-- **CI output excerpts** for build/test failures
+- **Code**: `startLine:endLine:filepath` — snippet inline
+- **Quotes**: attribute: *Jira ENG-12345:*, *GitHub PR #890:*
+- **MCP fields**: call out field name
+- **CI output**: excerpts for failures
 
-The **expected behaviour / fix / next steps** quote is mandatory. If the source doesn't state one, say so explicitly — don't invent it.
+Expected behaviour/fix/next steps quote mandatory. If absent in source, say so.
 
 ---
 
 ## Step 4 — Call-path tracing (when asked)
 
-When the user asks "where is this called?" or "when does this run?":
-
-1. Show the full chain: `entrypoint → intermediate calls → target method`
-2. Include a snippet for both the entrypoint and the target call site
-3. State whether the call is **direct** or **indirect** (e.g. via event/queue)
-4. One-line timeline format:
+1. Full chain: `entrypoint → intermediate → target`
+2. Snippet for both entrypoint and target call site
+3. Direct or indirect (event/queue)?
+4. One-line timeline:
    ```
    POST /apply → ApplyView → ApplyObject.submit_job() → validate_answers() → check_custom_rules()
    ```
 
-Never answer with isolated snippets — always connect them into one runtime story.
+Never isolated snippets — connect into one runtime story.
 
 ---
 
 ## Quality gate
 
-Before sending, verify:
-- [ ] Would a first-week intern understand every term without prior context?
-- [ ] Does the explanation read like a story (beginning → middle → end)?
-- [ ] Is every claim backed by a quote or code citation?
-- [ ] Is the expected behaviour / fix explicitly quoted (or explicitly flagged as absent)?
-- [ ] Is observed behaviour kept separate from inferred root cause?
+Before sending:
+- First-week intern understands every term?
+- Reads as story (beginning → middle → end)?
+- Every claim backed by quote/citation?
+- Expected behaviour/fix quoted (or flagged absent)?
+- Observed separate from inferred root cause?
 
-If any is "no", fix it first.
+If any "no" → fix first.
 
 ---
 
 ## Tone
 
 - Plain English first, code second
-- No jargon without a one-line explanation
-- Summarise lists and tables before showing raw output
-- Zero assumed context unless the user explicitly says otherwise
+- No jargon without one-line explanation
+- Summarise before showing raw output
+- Zero assumed context
 
 ---
 
 ## Examples
 
-See the `examples/` files in this skill directory for reference explanations:
+See `examples/`:
+- [example-arc-a-be-developer-reading-fe-code.md](example-arc-a-be-developer-reading-fe-code.md) — Arc A bug fix; frontend→backend analogy table
 
-- [example-arc-a-be-developer-reading-fe-code.md](example-arc-a-be-developer-reading-fe-code.md) — Arc A bug fix explained to a backend developer; includes frontend→backend analogy table
+---
+
+## Workflow ending
+
+After explanation, offer next action based on source type:
+- Bug/error → *"/work-on-jira-task to fix? /create-jira-ticket-with-reference to track?"*
+- PR → *"/review-pr-architecture to review? /get-pr-ready-to-merge to address?"*
+- Design doc/RFC → *"/create-tech-doc to document? /work-on-jira-task to implement?"*
+
+If on a branch, run `/project-context:update` with key findings from explanation.

@@ -9,57 +9,92 @@ description: >
 
 # Search Chat History
 
-Find a past Claude Code session from vague hints.
+Find past sessions or summarize recent activity.
 
 ---
 
-## Step 1 — Extract keywords from the hint
+## Default Mode — Activity Summary
 
-From what the user remembers, pull out 2–4 concrete keywords: function names,
-email addresses, error messages, file names, API endpoints, or any specific term
-they mention.
+For "what have I worked on?", "what did I do this week?", date ranges without keywords.
+
+### 1 — Date range
+Parse: "this week" → Mon 00:00 to now, "past 3 days" → 3d ago, "last week" → prev Mon-Sun. Convert relative → absolute timestamps.
+
+### 2 — Extract sessions
+```bash
+python3 -c "
+import json
+from datetime import datetime
+cutoff = datetime(YYYY, MM, DD).timestamp() * 1000
+for line in open('$HOME/.claude/history.jsonl'):
+    try: obj = json.loads(line)
+    except: continue
+    if obj.get('timestamp', 0) >= cutoff:
+        print(line.strip())
+" > /tmp/filtered_history.jsonl
+```
+
+### 3 — Aggregate by topic
+Group by: ticket IDs (ENG-*, IMPL-*), PRs, skills invoked, repos. Earlier messages = context, later = resolution.
+
+### 4 — Present
+```
+## Activity: [date range]
+### By Ticket
+- ENG-XXXXX: [what done] (dates)
+### PRs
+- repo#123: [status] (date)
+### Key Decisions
+- [notable decisions/learnings]
+```
+
+### 5 — Offer git log cross-reference
+After summary: *"Check `git log --author=Akshat --since=DATE` for commits not in chat?"*
+Run automatically if user asked in prompt.
 
 ---
 
-## Step 2 — Grep history.jsonl
+## Keyword Mode — Find specific session
 
+For "find that chat where...", "remember when we...".
+
+### 1 — Extract keywords
+2-4 concrete: function names, emails, errors, filenames, endpoints.
+
+### 2 — Grep
 ```bash
 grep -n "keyword1\|keyword2" ~/.claude/history.jsonl -i | head -50
 ```
+Too many → narrow. Zero → synonyms or shorter substrings.
 
-If too many results, narrow with more keywords. If zero results, try synonyms or
-shorter substrings.
+### 3 — Get sessionId
+Most relevant line → extract `sessionId`.
 
----
-
-## Step 3 — Identify the sessionId
-
-From the results, find the most relevant line. Extract its `sessionId`.
-
----
-
-## Step 4 — Extract the full thread
-
+### 4 — Extract thread
 ```bash
 grep "SESSION_ID" ~/.claude/history.jsonl
 ```
+Parse `display` field in timestamp order.
 
-Parse each message's `display` field in timestamp order to reconstruct the conversation.
+### 5 — Present
+- **Session ID** + **date** (timestamp ms → human)
+- **Summary**: what was debugged/built/discussed
+- **Messages** in order: user asked, action taken
+- Note hashed `pastedContents` (unrecoverable) vs readable
 
----
-
-## Step 5 — Present the thread
-
-Show:
-- **Session ID** and approximate **date** (convert timestamp ms → human date)
-- **Thread summary**: what was being debugged/built/discussed
-- **Each message** in order: what the user asked, what action was taken
-- Note which `pastedContents` are hashed (content not recoverable) vs readable
+### 6 — Deduplicate
+Multiple matches → group by topic (same ticket/PR). One entry per topic with all session dates.
 
 ---
 
 ## Limitations
 
-- **Chat titles not stored** — only visible in the Claude UI sidebar
-- **Hashed pasted content** (`contentHash` field) means the actual pasted text is unrecoverable — only the surrounding message is readable
-- **Multiple matches**: if several sessions match, list them all with their dates and a one-line summary, let the user pick
+- Chat titles not stored — only in Claude UI sidebar
+- Hashed pasted content (`contentHash`) unrecoverable
+- Multiple matches → group by topic, let user pick
+
+---
+
+## Workflow ending
+
+After presenting results, offer: *"Load findings into current branch context via /project-context:update?"*

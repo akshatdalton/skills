@@ -134,18 +134,3 @@ Reply only when reviewer asked something needing textual response (design, namin
 Don't apply blindly. Analyse all first → group by theme → one at a time with approval → push back when warranted.
 
 See [EXAMPLES.md](EXAMPLES.md) for examples.
-
----
-
-## Workflow ending
-
-Before completing, run `/project-context:update` with blockers resolved and current PR state.
-
-```
-───── workflow ─────
-✓ Ticket: ENG-XXXXX
-✓ PR: https://github.com/{owner}/{repo}/pull/{number}
-✓ Blockers resolved: [count] CI fixes, [count] comments addressed
-→ PR ready for merge
-────────────────────
-```
