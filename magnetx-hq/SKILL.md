@@ -126,7 +126,7 @@ Product decision made or new question mid-session:
 | Task Board | `a119bf6a-603e-4f51-b602-fc7ffb4e445e` |
 | X Tracker | `4b9b90de-9252-4da7-a76c-f40fa89c610f` |
 | Parent page | `304ecb1d-39d0-80f2-849b-c46d97e80672` |
-| GitHub | akshatdalton/magnetx-landing |
+| GitHub | akshatdalton/magnetx (monorepo, landing in landing/) |
 | Vercel | magnetx.co |
 
 ## Git Identity
