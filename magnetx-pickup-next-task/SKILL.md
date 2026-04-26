@@ -1,84 +1,108 @@
 ---
 name: magnetx-pickup-next-task
 description: >
-  Pick the next "To Do" task from MagnetX Task Board, fetch context, set to "In Progress".
-  Usage: /magnetx-pickup-next-task or /magnetx-pickup-next-task [phase]
+  Pick next "To Do" task from MagnetX Task Board, fetch context, set "In Progress".
+  Usage: /magnetx-pickup-next-task or /magnetx-pickup-next-task [phase].
+  If user seems lost or no active task, suggest /magnetx-hq first for phase overview.
 ---
 
-# /magnetx-pickup-next-task Skill — EXECUTION STEPS
+# /magnetx-pickup-next-task — Task Picker
 
-When user calls this skill, execute these steps:
+Pick next task from Notion board. Set In Progress. Show context.
+
+**No active task + no args?** Suggest `/magnetx-hq` for phase overview first.
+
+---
+
+## Step 0: Read HQ Context (Notion)
+
+Fetch Notion HQ Context page for current phase + decisions:
+- **Page ID:** `34eecb1d-39d0-814e-b03e-c39f13d1c254`
+- `mcp__claude_ai_Notion__notion-fetch` with page ID
+
+Source of truth for active phase, settled decisions, completed log.
+
+---
 
 ## Step 1: Parse Input
 
-- If no argument: phase = "Personal X Growth"
-- If argument provided: phase = argument (e.g., "Validate", "Concierge", "Build MVP")
+- No arg → phase = active phase from HQ Context (currently: "Build MVP")
+- Arg provided → phase = argument (e.g., "Validate", "Personal X Growth")
 
-## Step 2: Query Notion Task Board
+## Step 2: Query Task Board
 
-Use `mcp__claude_ai_Notion__notion-search` or direct data source query:
-- Data Source ID: `a119bf6a-603e-4f51-b602-fc7ffb4e445e`
-- Filter: Status = "To Do" AND Phase = [parsed phase from Step 1]
-- Sort: Priority DESC (High first), then created time ASC (oldest first)
-- Return: First result
+Data Source ID: `a119bf6a-603e-4f51-b602-fc7ffb4e445e`
+- Filter: Status = "To Do" AND Phase = [parsed phase]
+- Sort: Priority DESC (High first), created ASC (oldest first)
+- Return first result
 
-## Step 3: Fetch Full Task Details
+Also check: any "In Progress" task in phase → recommend resume instead.
 
-Use `mcp__claude_ai_Notion__notion-fetch` with task ID from Step 2:
-- Get all properties: Task, Phase, Type, Priority, Status, Notes, URL
-- Read the Notes field completely (contains context and decision rationale)
+## Step 3: Fetch Task Details
 
-## Step 4: Update Status in Notion
+`mcp__claude_ai_Notion__notion-fetch` with task ID:
+- Get: Task, Phase, Type, Priority, Status, Notes, URL
+- Read Notes completely (contains context + rationale)
 
-Use `mcp__claude_ai_Notion__notion-update-page`:
-- Set Status = "In Progress"
-- Keep other properties unchanged
+## Step 4: Set In Progress
 
-## Step 5: Enrich Output
+`mcp__claude_ai_Notion__notion-update-page`:
+- Status → "In Progress"
+- Keep other properties
 
-Before displaying, check for related context:
-- If Type = "Skill": check if `~/.claude/skills/[skill-name]/SKILL.md` exists
-- Check `magnetx_build_system_completed_tasks.md` for related done tasks
-- List any file paths or Notion URLs mentioned in Notes
+## Step 5: Enrich
 
-## Step 6: Output Ready-to-Work Format
+- Type = "Skill" → check `~/.claude/skills/[name]/SKILL.md` exists
+- List file paths or URLs from Notes
+
+## Step 6: Output
 
 ```
-🎯 NEXT TASK: [Task Title]
+NEXT TASK: [title]
 
-📋 DETAILS:
-  Phase: [Phase]
-  Type: [Type]
-  Priority: [Priority]
-  Status: ✅ In Progress
+  Phase:    [phase]
+  Type:     [type]
+  Priority: [priority]
+  Status:   In Progress
 
-📝 CONTEXT:
-[Full Notes text]
+CONTEXT:
+  [notes text]
 
-📂 FILES/REFERENCES:
-[List any files, URLs, or resources mentioned]
+FILES:
+  [paths/URLs]
 
-⚙️ PREP:
-1. [First actionable step based on task type]
-2. [Second step]
-3. etc.
+PREP:
+  1. [first step]
+  2. [second step]
 
-🔗 NOTION:
-[Task URL from Notion]
+NOTION: [task URL]
 ```
 
-## Step 7: Offer Next Steps
+## Step 7: Offer
 
-End with:
 ```
-Ready to work? Let me know when you finish and I'll call /magnetx-pickup-next-task again.
+Ready to work? Say "done" when finished.
 ```
 
 ---
 
-## Notes
+## On "Done" / "Finished" / "Complete"
 
-- **Do NOT mark task as Done** — only set to "In Progress"
-- **If no To Do tasks found** → report back: "No To Do tasks in [phase]. What would you like to do?"
-- **Priority order:** High → Medium → Low
-- **Task queue order:** Within same priority, pick earliest created task (oldest first)
+1. Notion task → Status = "Done" (background)
+2. HQ Context page → append to "Recently Completed Tasks Log":
+   - Date, task name, one-line note (background)
+3. HQ Context → update "Last Activity Per Phase" row (background)
+4. Auto-run next task pickup (back to Step 1)
+
+---
+
+## Rules
+
+- Never mark task Done without user saying so
+- Priority: High > Medium > Low
+- Same priority: oldest first
+- No To Do tasks → report back, suggest `/magnetx-hq`
+
+## Git Identity
+
+GitHub: **akshatdalton** (personal). Eightfold → `gh auth switch` first.
