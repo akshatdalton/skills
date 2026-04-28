@@ -202,6 +202,9 @@ Before completing, run `/project-context:update` with PR URL and CI status.
 ✓ PR: https://github.com/{owner}/{repo}/pull/{number}
 ✓ CI: running
 → If CI fails: /get-pr-ready-to-merge
-→ Consider: /schedule to set up CI watcher cron (CI takes ~4hrs)
 ────────────────────
 ```
+
+### CI watch cron
+
+See `_shared/workflow-status.md` — "CI watch cron" section. Trigger: PR was just created/updated and CI is now running.

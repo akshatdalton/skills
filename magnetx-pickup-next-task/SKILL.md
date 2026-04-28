@@ -14,13 +14,17 @@ Pick next task from Notion board. Set In Progress. Show context.
 
 ---
 
-## Step 0: Read HQ Context (Notion)
+## Step 0: Read Context (Cache-First)
 
-Fetch Notion HQ Context page for current phase + decisions:
-- **Page ID:** `34eecb1d-39d0-814e-b03e-c39f13d1c254`
-- `mcp__claude_ai_Notion__notion-fetch` with page ID
+**Cache file:** `~/.claude/skills/magnetx-hq/cache.json`
 
-Source of truth for active phase, settled decisions, completed log.
+1. Read `cache.json` with the Read tool
+2. If file exists and valid JSON → use cached data (active phase, tasks, decisions)
+3. If file missing or malformed → fall back to Notion fetch:
+   - **Page ID:** `34eecb1d-39d0-814e-b03e-c39f13d1c254`
+   - `mcp__claude_ai_Notion__notion-fetch` with page ID
+
+Cache contains: active phase, task list with statuses, settled decisions, completed log.
 
 ---
 
@@ -88,11 +92,13 @@ Ready to work? Say "done" when finished.
 
 ## On "Done" / "Finished" / "Complete"
 
-1. Notion task → Status = "Done" (background)
-2. HQ Context page → append to "Recently Completed Tasks Log":
-   - Date, task name, one-line note (background)
-3. HQ Context → update "Last Activity Per Phase" row (background)
-4. Auto-run next task pickup (back to Step 1)
+1. **Immediately** show next task from conversation context (no Notion call)
+2. **Background agent** (single agent, all writes batched):
+   - Notion task → Status = "Done"
+   - HQ Context page → append to "Recently Completed Tasks Log": date, task name, one-line note
+   - HQ Context → update "Last Activity Per Phase" row
+   - After all Notion writes → refresh `~/.claude/skills/magnetx-hq/cache.json` (fetch all 3 sources, rewrite cache)
+3. Auto-run next task pickup (back to Step 1, reads from cache or conversation context)
 
 ---
 

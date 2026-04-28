@@ -1,0 +1,23 @@
+{
+  "skill_name": "local-schedule",
+  "evals": [
+    {
+      "id": 0,
+      "prompt": "I want to check my open GitHub PRs every weekday morning around 9am and append a brief summary to ~/Desktop/pr-log.txt. Set it up.",
+      "expected_output": "Guides user through CREATE flow: drafts a self-contained prompt for the job, sets weekday cron expression in local time (e.g. 57 8 * * 1-5), confirms recurring=true, asks about durable, shows config, calls CronCreate, reports job ID and 7-day expiry warning.",
+      "assertions": []
+    },
+    {
+      "id": 1,
+      "prompt": "Remind me in 45 minutes to review the staging deployment before it gets promoted to prod.",
+      "expected_output": "Recognizes this as a one-shot reminder. Drafts a prompt with the reminder message, calculates a one-time cron expression ~45 minutes from now, sets recurring=false, skips durable question (in-memory is fine for a reminder), shows config, calls CronCreate.",
+      "assertions": []
+    },
+    {
+      "id": 2,
+      "prompt": "What jobs do I have scheduled right now?",
+      "expected_output": "Calls CronList and displays results in readable format: human-readable schedule, next fire time, durable flag, and job ID for each active job.",
+      "assertions": []
+    }
+  ]
+}

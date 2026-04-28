@@ -1,0 +1,112 @@
+{
+  "updated_at": "2026-04-27T12:00:00Z",
+  "hq_context": {
+    "active_phase": "Build MVP",
+    "active_phase_reason": "Validated engagement method via personal use. Landing page live at magnetx.co. Waitlist alone = weak signal. Need working product to show when reaching out individually.",
+    "phases": [
+      {
+        "name": "Personal X Growth",
+        "done": 7,
+        "total": 8,
+        "last_activity": "2026-04-12",
+        "last_work": "2/5 replies posted using /magnetx-engage. Wire scrape-x-profile still To Do."
+      },
+      {
+        "name": "Validate",
+        "done": 2,
+        "total": 3,
+        "last_activity": "2026-04-18",
+        "last_work": "Landing page deployed to Vercel (magnetx.co). Copy writing still To Do."
+      },
+      {
+        "name": "Concierge",
+        "status": "SKIPPED",
+        "last_activity": "2026-04-17",
+        "last_work": "Decision: build MVP first, skip manual experiment. Validated via personal use."
+      },
+      {
+        "name": "Build MVP",
+        "done": 0,
+        "total": 7,
+        "last_activity": "2026-04-19",
+        "last_work": "Tech stack decided. No code written yet. Next: backend niche fingerprinting."
+      },
+      {
+        "name": "Launch",
+        "done": 0,
+        "total": 5,
+        "blocked_on": "MVP completion"
+      }
+    ],
+    "open_decisions": [
+      {
+        "num": 1,
+        "question": "Post freshness constraint",
+        "context": "Replies on posts older than ~90min get buried. Users can't engage on stale posts.",
+        "options": "A) Surface only posts <2h old B) Batch at optimal times C) Real-time feed",
+        "status": "Open"
+      },
+      {
+        "num": 2,
+        "question": "Curated accounts vs user timeline",
+        "context": "Small accounts may not follow niche accounts. Curated = we control quality but less personalized.",
+        "options": "A) Curated list B) User timeline C) Hybrid: curated default + user follows",
+        "status": "Open"
+      },
+      {
+        "num": 3,
+        "question": "User engagement time model",
+        "context": "Users pick a ~20min window. Needs to align with when target accounts are most active.",
+        "options": "A) Suggest optimal time B) On-demand C) Push notification on high-value post",
+        "status": "Open"
+      }
+    ],
+    "settled_decisions": [
+      "Skip Concierge phase — validated method via personal /magnetx-engage use",
+      "MVP before outreach — waitlist = weak signal. Show working product.",
+      "Pricing: $19/mo founding member for first 100 users, locked 1 year",
+      "Tech stack: Python FastAPI + HTMX + Jinja2. SQLite → Postgres when needed.",
+      "Apify over X official API — cheaper, no rate limits, swappable",
+      "Haiku over Sonnet — no user-visible quality gap for angles",
+      "AI writes angles, not replies — core product principle, non-negotiable",
+      "Stripe is last — add payment only when sharing externally",
+      "X Premium: Recommend in onboarding, don't require. Show loss without it.",
+      "Profile Readiness Check: Build into onboarding. Show what they're losing, don't gate."
+    ],
+    "completed_log": [
+      { "date": "2026-04-11", "task": "Curate target account list", "note": "18 accounts in accounts.json (2K-80K followers)" },
+      { "date": "2026-04-11", "task": "Check aksenhq-x-reply-strategy covers Mode 2", "note": "Decision: wrap as angles-only, skip drafts" },
+      { "date": "2026-04-11", "task": "Build /magnetx-engage Mode 1", "note": "SKILL.md + magnetx_engage.py" },
+      { "date": "2026-04-11", "task": "Build /magnetx-engage Mode 2", "note": "Reply coach with 7 angle types, no drafts" },
+      { "date": "2026-04-11", "task": "Set up accounts.json", "note": "18 curated accounts in skill directory" },
+      { "date": "2026-04-12", "task": "Set up daily habit streak tracker", "note": "Notion database with calendar view" },
+      { "date": "2026-04-12", "task": "Run first daily session", "note": "2/5 replies posted, streak = 1" },
+      { "date": "2026-04-12", "task": "Wire scrape-x-profile into Mode 1", "note": "End-to-end integration done" },
+      { "date": "2026-04-12", "task": "Build Notion task workflow skill", "note": "/magnetx-pickup-next-task created" },
+      { "date": "2026-04-18", "task": "Build landing page + waitlist", "note": "Static HTML + Tally form embed" },
+      { "date": "2026-04-18", "task": "Deploy to Vercel", "note": "magnetx.co live, GitHub auto-deploy" },
+      { "date": "2026-04-26", "task": "Market research + pricing decision", "note": "$19/mo founding, X Premium recommendation, profile readiness check" }
+    ],
+    "mvp_segments": ["Skeleton", "Core loop", "Polish", "Production"]
+  },
+  "x_tracker": {
+    "streak": 1,
+    "last_session_date": "2026-04-12"
+  },
+  "tasks": [
+    { "id": "33fecb1d-39d0-8175-9468-fc19ff32481f", "title": "Post problem-first thread on X", "phase": "Personal X Growth", "status": "To Do", "notes": "" },
+    { "id": "33fecb1d-39d0-810a-a5ed-e31fb0be3efa", "title": "Write landing page copy (outcome-first, Alex-focused)", "phase": "Validate", "status": "To Do", "notes": "" },
+    { "id": "34eecb1d-39d0-8164-829e-d6e5948438fa", "title": "Profile Readiness Check as onboarding step", "phase": "Build MVP", "status": "To Do", "notes": "" },
+    { "id": "34eecb1d-39d0-81ea-a664-d2086d90a1f5", "title": "X Premium recommendation in onboarding flow", "phase": "Build MVP", "status": "To Do", "notes": "" },
+    { "id": "34eecb1d-39d0-81c5-8991-df83e2ade83a", "title": "Community: X accountability threads now, Discord after 50 users", "phase": "Build MVP", "status": "To Do", "notes": "" },
+    { "id": "34eecb1d-39d0-816a-b07f-dc26862b3ee0", "title": "Pricing: $19/mo founding member for first 100 users (1 year lock)", "phase": "Build MVP", "status": "To Do", "notes": "" },
+    { "id": "33fecb1d-39d0-812d-ae7c-c03c36f6f4e6", "title": "Feature: Streak tracker + mark-as-done flow", "phase": "Build MVP", "status": "To Do", "notes": "" },
+    { "id": "33fecb1d-39d0-81f0-ac32-f2616ffeedf3", "title": "Feature: Weekly value receipt (3 numbers)", "phase": "Build MVP", "status": "To Do", "notes": "" },
+    { "id": "33fecb1d-39d0-8115-9fad-c6855bc8f6bb", "title": "Finalize ICP + persona", "phase": "Build MVP", "status": "To Do", "notes": "" },
+    { "id": "33fecb1d-39d0-8143-92dc-d98cf4a17d1d", "title": "Soft launch to waitlist + concierge beta users", "phase": "Launch", "status": "To Do", "notes": "" },
+    { "id": "33fecb1d-39d0-8109-891e-eb0d5f37f210", "title": "X build-in-public launch thread", "phase": "Launch", "status": "To Do", "notes": "" },
+    { "id": "33fecb1d-39d0-810b-9af9-cac89dc127f7", "title": "Recruit 5 beta users matching the persona", "phase": "Launch", "status": "To Do", "notes": "" },
+    { "id": "33fecb1d-39d0-8180-a2ff-f4854abd7898", "title": "Product Hunt launch", "phase": "Launch", "status": "To Do", "notes": "" },
+    { "id": "33fecb1d-39d0-8194-9212-d683001c16f5", "title": "Indie Hackers Show IH post", "phase": "Launch", "status": "To Do", "notes": "" }
+  ]
+}

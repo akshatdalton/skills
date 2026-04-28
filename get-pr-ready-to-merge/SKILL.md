@@ -149,3 +149,7 @@ Before completing, run `/project-context:update` with blockers resolved and curr
 → PR ready for merge
 ────────────────────
 ```
+
+### CI watch cron
+
+See `_shared/workflow-status.md` — "CI watch cron" section. Trigger: `needs_ci` was posted this run.

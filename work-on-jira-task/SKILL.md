@@ -105,3 +105,7 @@ Before completing, run `/project-context:update` with key decisions, relevant fi
 → Next: /submit-pr
 ────────────────────
 ```
+
+### CI watch cron
+
+See `_shared/workflow-status.md` — "CI watch cron" section. Trigger: `/submit-pr` just completed and PR is created.

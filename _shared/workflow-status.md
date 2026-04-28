@@ -39,3 +39,15 @@ Side entries:
 - `/debug-api` → `/create-jira-ticket-with-reference` or `/work-on-jira-task`
 - `/create-tech-doc` → `/create-jira-ticket-with-reference` or `/work-on-jira-task`
 - `/search-history` → `/project-context:update` (load findings)
+
+## CI watch cron (offer whenever CI is triggered)
+
+After any step that starts CI — `needs_ci` posted in `/get-pr-ready-to-merge`, or PR created in `/submit-pr`/`/work-on-jira-task` — always ask:
+
+> "Want me to set up a cron to watch CI? When it completes I'll auto-prompt a fresh `/get-pr-ready-to-merge` run."
+
+If yes → use `/local-schedule` to create a hourly cron (`0 * * * *`) that:
+1. Runs `gh api repos/ORG/REPO/commits/{sha}/check-runs` — GitHub Actions jobs
+2. Runs `gh api repos/ORG/REPO/commits/{sha}/status` — external CI suite (Eightfold: Prerequisites, ESLint, Pytest, etc.)
+3. If any still pending/in_progress → exit silently (runs again next hour)
+4. If all complete → remove itself from crontab + send ntfy.sh push notification (pass or fail) with message: "Run: /get-pr-ready-to-merge <PR URL>"
