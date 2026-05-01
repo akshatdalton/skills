@@ -11,6 +11,14 @@ description: >
 
 Goal: pinpoint exact line and reason — not just reproduce.
 
+## Pre-entry: project-context contract (mandatory — do not skip)
+
+On entry, MUST invoke `Skill(skill="project-context", args="branch:read")` first — prior findings often pinpoint the area to investigate. Surface one-line `↳ loaded ...` or `↳ no context yet`.
+
+The moment you locate the failing line, MUST invoke `Skill(skill="project-context", args="branch:update root cause: <file>:<line> — <reason>")` and surface `↳ saved to branch context: ...`. Same for any tracing insight (call chain, gate behavior, env config) — save immediately, never batch to the end.
+
+Never ask. Save and notify.
+
 ---
 
 ## Step 1 — Gather inputs
@@ -104,6 +112,24 @@ When user shares output:
 2. Start/restart if needed
 3. Health check to confirm up
 4. If testing TetherAgent from vscode, verify `TetherAgent._base_url` points to correct wipdp instance
+
+### Generating Tether JWT tokens (wipdp auth)
+
+Tokens are generated from the **vscode** EC2 instance (where `tether_utils` lives) and used to authenticate against a wipdp server.
+
+`generate_tether_token` signature — **verify with `inspect.signature` before use**:
+```python
+tether_utils.generate_tether_token(profile_enc_id: str, group_id: str, profile_email: str | None = None) -> str
+```
+Common mistake: passing `enc_profile_id=` (wrong kwarg name) → `TypeError`. Correct param is `profile_enc_id`.
+
+### `uv` not in PATH on non-interactive SSH to non-dev EC2
+
+On demo/staging instances, `uv` lives at `~/.local/bin/uv` and is not in PATH for non-interactive SSH sessions. Fix:
+```bash
+export PATH="$HOME/.local/bin:$PATH"
+uv run pytest ...
+```
 
 ---
 

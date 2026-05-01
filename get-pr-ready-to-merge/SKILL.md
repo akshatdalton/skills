@@ -52,10 +52,11 @@ Also scan **`get_comments`** for bot messages with "CHECKLIST VALIDATION ERRORS"
 
 ### D. PR description / checklist failures
 
-1. Read `.github/PULL_REQUEST_TEMPLATE.md` (source of truth)
-2. Compare with PR body — check bidirectionally (bot may inject extra mandatory items)
-3. Fix: remove duplicate unchecked items, check mandatory boxes, **decode HTML entities** (`&#39;` → `'`)
-4. `update_pull_request` via MCP → add `needs_ci` comment to re-trigger CI
+All PR body rules live in `/submit-pr` (single source of truth — checklist rules, mandatory sections, self-validation). To fix:
+1. Follow `/submit-pr` Phase 3–4: read template with **Read tool**, fill checklist, self-validate
+2. Also compare bidirectionally — bot may inject extra mandatory items not in template
+3. Write body to temp file → `--body-file` → `update_pull_request`
+4. Post `needs_ci` comment to re-trigger validation
 
 ### E. Impact analysis (code-review-graph)
 
@@ -97,7 +98,7 @@ Close: one bullet per group theme, Group 4 recommendation, fix order 0→1→2�
 
 **Never commit/push without explicit user approval.**
 
-Group 0: read template → fix body → `update_pull_request` → `needs_ci` comment.
+Group 0: follow `/submit-pr` Phase 3–4 rules (single source of truth for checklist) → fix body → `update_pull_request` → `needs_ci` comment.
 
 Groups 1–3: implement → show changes → run tests via `/run-on-ec2` → ask approval → commit (no Claude co-author) → push → resolve threads:
 
@@ -137,9 +138,13 @@ See [EXAMPLES.md](EXAMPLES.md) for examples.
 
 ---
 
+## Passive context updates throughout
+
+Per the passive-context-updates feedback rule, invoke `Skill(skill="project-context", args="branch:update <info>")` whenever you discover a CI cause, fix approach, or new blocker — immediately, one-liner notification, never ask. Bubble up to `project:update` if the cause/decision affects the broader initiative.
+
 ## Workflow ending
 
-Before completing, run `/project-context:update` with blockers resolved and current PR state.
+Before completing, the final-state summary (blockers resolved, current PR state) is also auto-saved via `Skill(skill="project-context", args="branch:update ...")`.
 
 ```
 ───── workflow ─────
@@ -150,6 +155,34 @@ Before completing, run `/project-context:update` with blockers resolved and curr
 ────────────────────
 ```
 
-### CI watch cron
+### Auto-add to /pr-watcher (passive)
 
-See `_shared/workflow-status.md` — "CI watch cron" section. Trigger: `needs_ci` was posted this run.
+After fixes are pushed and `needs_ci` is posted, invoke `/pr-watcher` in ADD mode silently — do NOT ask first. Use `Skill(skill="pr-watcher", args="add <PR url>")`. The pr-watcher skill auto-starts `/loop 1h /pr-watcher` in this tab if not already running.
+
+Surface a single line in chat:
+
+```
+✓ Watching #<N> via /pr-watcher (this tab is now the watcher — leave it open)
+```
+
+If the user objects in the next message, run `/pr-watcher remove <id>`.
+
+---
+
+## Pre-entry: lazy-load context
+
+At the start of this skill (before analyzing the PR), auto-fire `Skill(skill="project-context", args="branch:read")` to load existing branch + project context. Skip if PR is for a different repo than `pwd`.
+
+## Pre-push: re-test before pushing fixes
+
+Before pushing a code fix, in order:
+
+1. **Identify test files** for the modified code (same patterns as `/work-on-jira-task` Step 5: `*.test.ts(x)`/`*.spec.ts(x)`/`__tests__` for vscode, `tests/test_*.py` for wipdp). If none exist → record `↳ saved to branch context: no tests for <component> — skip` and proceed.
+
+2. **Skip lint on EC2** — pre-commit hook handles it.
+
+3. **Run identified tests**:
+   - vscode → `/run-on-ec2` (mandatory if files exist + VPN up; record skip reason in branch context if VPN down).
+   - wipdp → local pytest.
+
+4. Doc-only / comment-only fixes are skippable without recording.

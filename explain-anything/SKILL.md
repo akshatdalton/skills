@@ -83,6 +83,8 @@ Expected behaviour/fix/next steps quote mandatory. If absent in source, say so.
 
 Never isolated snippets — connect into one runtime story.
 
+**Variant — data lineage / field tracing** (when a value is wrong at the output): follow the field forward layer by layer, annotating each assignment with `→ "value"`, marking the terminal node ✓/✗. Show broken path first, then fixed. See [examples/example-arc-d-data-lineage-field-tracing.md](examples/example-arc-d-data-lineage-field-tracing.md).
+
 ---
 
 ## Quality gate
@@ -111,6 +113,7 @@ If any "no" → fix first.
 
 See `examples/`:
 - [example-arc-a-be-developer-reading-fe-code.md](example-arc-a-be-developer-reading-fe-code.md) — Arc A bug fix; frontend→backend analogy table
+- [examples/example-arc-d-data-lineage-field-tracing.md](examples/example-arc-d-data-lineage-field-tracing.md) — Step 4 variant; field tracing broken vs fixed path with ✓/✗
 
 ---
 

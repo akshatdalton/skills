@@ -7,6 +7,14 @@ description: Create Jira tickets by inheriting metadata (priority, sprint, label
 
 Inherit metadata from reference ticket, apply user overrides.
 
+## Pre-entry: project-context contract (mandatory — do not skip)
+
+On entry, MUST invoke `Skill(skill="project-context", args="branch:read")` as the first action. This loads branch + parent project context (transitively). Surface one-line `↳ loaded ...` or `↳ no context yet`.
+
+When the new ticket is created, MUST invoke `Skill(skill="project-context", args="project:update <slug> spawned new ticket ENG-XXXXX (<title>)")` to record the new ticket in the project's ticket-graph. Then surface `↳ saved to project context: ...`.
+
+Never ask "shall I save?" — save and notify. User corrects next message if wrong.
+
 ## Workflow
 
 ### Step 1 — Identify reference

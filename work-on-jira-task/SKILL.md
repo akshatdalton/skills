@@ -7,6 +7,18 @@ description: Structured workflow for working on Jira tasks — fetches ticket de
 
 Understand → plan → implement. Order matters.
 
+## Step 0 — Lazy-load context (auto)
+
+Before fetching the ticket, auto-fire `Skill(skill="project-context", args="branch:read")`. This loads any existing branch + project context for the current branch (so we don't re-discover what was already known). If nothing exists yet, that's fine — it returns a "seed me" message and we proceed.
+
+**Cross-repo sibling check:** after branch:read transitively loads the parent project, scan its `## Branches in flight` list. If any sibling branch is in a DIFFERENT repo than current `pwd` AND its PR is still open (not merged), surface ONCE:
+
+```
+↳ sibling work in flight: <repo>:<branch> → PR #<n> (<state>). Load that branch's context for cross-reference?
+```
+
+Default no — wait for user. Skip if no project, no siblings, or all siblings are merged.
+
 ## Step 1 — Fetch ticket
 
 Extract ticket ID. Atlassian MCP `getJiraIssue` (cloudId: `eightfoldai.atlassian.net`). Display summary, description, acceptance criteria, linked docs.
@@ -69,7 +81,24 @@ For code conventions (method ordering, imports, testing, docs): read [references
 
 Grep codebase before inventing. Match existing patterns.
 
-Tests via `/run-on-ec2`. Fix lint after implementing.
+### Test before declaring done
+
+Before Step 6 (commit + PR), do this in order:
+
+1. **Identify test files** for the code being changed:
+   - vscode → look for `*.test.ts(x)`, `*.spec.ts(x)`, or `__tests__/` adjacent to each modified file
+   - wipdp → look for `tests/test_<modname>.py` or `tests/<area>/test_*.py`
+   - **If none exist** → record once in branch context: `↳ saved to branch context: no test files for <component> — skipped test run` and skip to step 4.
+
+2. **Do NOT run lint on EC2** — pre-commit hook (vscode: husky; wipdp: ruff) handles lint before commit. EC2 time is for actual tests, not lint.
+
+3. **Run identified tests**:
+   - vscode → invoke `/run-on-ec2` (mandatory if test files exist AND VPN is up). If VPN down or EC2 unreachable → record `↳ saved to branch context: EC2 unreachable, tests deferred — risk: <test files>` and proceed.
+   - wipdp → local pytest is sufficient.
+
+4. **Surface manual verification** — if branch context has a `## Test Environment` section with sandbox URL + nav steps, surface them: "Verify manually at <sandbox>: <steps>" before declaring done. Do not block — just remind.
+
+The skill never claims "tests passing" without evidence. "No test files exist" or "infra unavailable" are valid skip reasons ONLY when recorded in branch context.
 
 ## Step 6 — Commit and PR
 
@@ -93,19 +122,19 @@ After push: *"Ready? I'll run `/submit-pr`."*
 
 ---
 
-## Workflow ending
+## Passive context updates throughout
 
-Before completing, run `/project-context:update` with key decisions, relevant files discovered, and approach taken.
+Per the passive-context-updates feedback rule (auto-loaded via MEMORY.md), invoke `Skill(skill="project-context", args="branch:update <info>")` immediately whenever you learn a material fact during this skill — a key file, a root cause, a design decision. Notify via one-liner `↳ saved to branch context: ...`. For scope-changing findings, also `project:update`. Never ask first.
+
+## Workflow ending
 
 ```
 ───── workflow ─────
 ✓ Ticket: ENG-XXXXX
 ✓ Branch: akshat/ENG-XXXXX-short-name
 ✓ Implemented + tests passing
-→ Next: /submit-pr
+→ Next: /submit-pr (which will auto-add PR to /pr-watcher)
 ────────────────────
 ```
 
-### CI watch cron
-
-See `_shared/workflow-status.md` — "CI watch cron" section. Trigger: `/submit-pr` just completed and PR is created.
+PR watching is handled by `/submit-pr` — no separate step here.

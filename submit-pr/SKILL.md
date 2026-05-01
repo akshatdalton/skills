@@ -5,6 +5,14 @@ description: Create or update GitHub pull requests following team standards — 
 
 # Submit Pull Request
 
+## Pre-entry: project-context contract (mandatory — do not skip)
+
+On entry, MUST invoke `Skill(skill="project-context", args="branch:read")` first. Surface one-line `↳ loaded ...` or `↳ no context yet`.
+
+After PR is created/updated, MUST invoke `Skill(skill="project-context", args="branch:update PR #<N> created at <url>, base=<branch>")` and surface `↳ saved to branch context: ...`. Also bubble up to project layer if this PR is part of a stack: `Skill(skill="project-context", args="project:update <slug> branch <branch> → PR #<N>")`.
+
+Never ask. Save and notify.
+
 ## Default: Fast Mode
 
 Collapse all gates into single confirmation. Show: files to stage, commit message, PR title. Execute add+commit+push+create/update without pausing. Stop only on error.
@@ -91,7 +99,7 @@ Check existing PR via GitHub MCP `list_pull_requests` filtered by `head:<branch>
 
 **Draft mode:** User says "keep in draft" → `--draft`.
 
-**CRITICAL:** Always read `.github/PULL_REQUEST_TEMPLATE.md` from filesystem — never reconstruct from memory. MCP encodes special chars as HTML entities, breaks CI. **ALWAYS** write body to temp file, pass `--body-file`. Never inline.
+**CRITICAL:** Always read `.github/PULL_REQUEST_TEMPLATE.md` from filesystem — never reconstruct from memory. Use the **Read tool** (not Bash `cat`/`head`) — Bash truncates at arbitrary line counts and silently drops sections at the bottom of the file. MCP encodes special chars as HTML entities, breaks CI. **ALWAYS** write body to temp file, pass `--body-file`. Never inline.
 
 Fill all sections, self-validate (Phase 4) before submitting.
 
@@ -205,6 +213,14 @@ Before completing, run `/project-context:update` with PR URL and CI status.
 ────────────────────
 ```
 
-### CI watch cron
+### Auto-add to /pr-watcher (passive)
 
-See `_shared/workflow-status.md` — "CI watch cron" section. Trigger: PR was just created/updated and CI is now running.
+After the PR is created/updated and CI is running, invoke `/pr-watcher` in ADD mode silently — do NOT ask first. Use `Skill(skill="pr-watcher", args="add <PR url>")`. The pr-watcher skill auto-starts `/loop 1h /pr-watcher` in this tab if not already running.
+
+Surface a single line in chat:
+
+```
+✓ Watching #<N> via /pr-watcher (this tab is now the watcher — leave it open)
+```
+
+If the user objects in the next message, run `/pr-watcher remove <id>`.
