@@ -123,7 +123,46 @@ ssh -i ~/eightfold/id_rsa ec2-user@172.31.27.248 \
 ```
 `config.get('subdomain_mapping')` returns None when the global DB is patched to return defaults. `subdomain in None` → TypeError. `or {}` makes it safe. Without this, `?domain=` param is ignored and group_id falls back to `volkscience.com`.
 
-**5. `utils/redis_utils.py` + `utils/counters.py` — break recursive crash on first start:**
+**5. `db/db_connection.py` + `utils/geocode.py` — allow employee users (e.g. `akshat.v@eightfold.ai`) to call position endpoints without global DB:**
+
+These patches are only needed when testing with an **employee-type user** (role=`employee` in log). Candidate users (e.g. `demo@eightfolddemo-samyak4.com`) do not need them.
+
+Root cause: `position_data_builder.get_is_referral_allowed → can_user_access_job_marketplace_referral → get_employee_location_country → geocode.lookup_country → GeoCode.save()` tries to write geocode results to the global DB (cluster_id=0) which isn't configured in dev.
+
+```bash
+ssh -i ~/eightfold/id_rsa ec2-user@172.31.27.248 "python3 << 'PYEOF'
+import re
+
+# Patch 5a: ConnectionContext.uri — return None instead of raising when global DB env var missing
+path = '/home/ec2-user/vscode/www/db/db_connection.py'
+src = open(path).read()
+old5a = \"        if not secret_key or not cluster_uri:\\n            raise DBConnectionErrorException('No secret or cluster URI\"
+new5a = \"        if not secret_key or not cluster_uri:\\n            if DBType.is_global(self.db_type):\\n                return None  # dev patch: global DB unavailable\\n            raise DBConnectionErrorException('No secret or cluster URI\"
+if old5a in src:
+    src = src.replace(old5a, new5a, 1)
+
+# Patch 5b: _create_engine — return None when uri is None (avoids assert)
+old5b = \"    def _create_engine(self, uri):\\n        assert uri\"
+new5b = \"    def _create_engine(self, uri):\\n        if not uri:\\n            return None  # dev patch: global DB unavailable\\n        assert uri\"
+if old5b in src:
+    src = src.replace(old5b, new5b, 1)
+open(path, 'w').write(src)
+print('db_connection.py patched (5a+5b)')
+
+# Patch 5c: geocode._lookup — suppress global DB write failure on res.save()
+path2 = '/home/ec2-user/vscode/www/utils/geocode.py'
+src2 = open(path2).read()
+old5c = '    res.save()\\n    return res'
+new5c = '    try:\\n        res.save()\\n    except Exception:\\n        pass  # dev patch: global DB unavailable\\n    return res'
+if old5c in src2:
+    src2 = src2.replace(old5c, new5c, 1)
+open(path2, 'w').write(src2)
+print('geocode.py patched (5c)')
+PYEOF
+"
+```
+
+**6. `utils/redis_utils.py` + `utils/counters.py` — break recursive crash on first start:**
 
 These are only needed if workers crash on first start with a Redis recursion error. Check `/tmp/apps.logs` first; if no recursion errors, skip.
 
