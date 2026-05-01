@@ -13,6 +13,28 @@ Tests HTTP endpoints against `https://akshat-v.dev.eightfold.ai`. Produces a tab
 
 ---
 
+## Quick start: given a curl from DevTools
+
+If the user provides a curl command (e.g. copied from browser Network tab), **skip the phase flow and go directly to Option C**. Parse the curl first:
+
+```
+curl 'https://<host>/api/<path>?domain=<group>' \
+  -H 'x-ef-group-id: <group_id>' \
+  --data-raw '{"data": {...}}'
+```
+
+Extract:
+- **endpoint path**: everything after the host — e.g. `/api/career_hub/v1/action/position/12345/favorite`
+- **group_id / DOMAIN**: from `?domain=` param OR `x-ef-group-id` header, whichever is present
+- **request body**: from `--data-raw` or `-d`
+- **user email**: ask the user — "Which email should I use for `<group_id>`?" if not obvious from context
+
+Then build the Option C script with those values. **Do not attempt curl-to-curl translation** — always convert to the Python requests pattern.
+
+**⚠️ Option C requires NO running server** — it runs Python directly on EC2, hitting `localhost:8000` from within the EC2 process. Skip Phase 0 entirely when using Option C.
+
+---
+
 ## Pre-entry: project-context contract (mandatory)
 
 On entry, invoke `Skill(skill="project-context", args="branch:read")` first. Surface one-line `↳ loaded ...` or `↳ no context yet`.
@@ -240,6 +262,22 @@ CSRF tokens are bound to the `_vs` session cookie. **Refresh CSRF before every P
 
 This approach runs Python on EC2, imports the user directly (same as `/debug-api`), and uses `requests.Session()` to hit `localhost:8000`. Avoids CloudFront routing issues entirely.
 
+**Does NOT require a running server** — Python accesses the DB and generates auth tokens directly. The only thing that must be running is the gunicorn server to receive the HTTP requests on port 8000.
+
+**Deriving user + group from a curl:**
+- `group_id` / `DOMAIN`: use `x-ef-group-id` header or `?domain=` param from the curl
+- `email`: ask the user if not stated — e.g. "Which email for `volkscience.com`?" Common: `akshat.v@eightfold.ai` for `volkscience.com`, `demo@eightfolddemo-samyak4.com` for `eightfolddemo-samyak4.com`
+
+**Verify EC2 patches before running** (quick check — takes 5 seconds):
+```bash
+ssh -i ~/eightfold/id_rsa ec2-user@172.31.27.248 \
+  "grep -c 'dev patch' /home/ec2-user/vscode/www/config/config.py && \
+   grep -c 'or {}' /home/ec2-user/vscode/www/utils/flask_utils.py && \
+   grep -c 'REDIS_CLUSTER_DEV_URI' /home/ec2-user/test_env.sh && \
+   grep -c 'VS_STATIC_CDN' /home/ec2-user/test_env.sh"
+```
+Expected: `2`, `1`, `1`, `1`. Any `0` → apply the corresponding patch from Phase 0 before proceeding.
+
 **Critical: `_vs` Secure cookie fix.** The server sets the `_vs` session cookie with `Secure=True`. Python's `requests` library correctly withholds secure cookies over plain HTTP (`localhost:8000`). If not fixed, every POST gets a fresh vs_cookie → CSRF `sha1(old_vs) ≠ sha1(new_vs)` → "Please reload" 400.
 
 **How CSRF works in Eightfold** (see `index_view.py:593-620`):
@@ -422,7 +460,7 @@ Output a table:
 | Dev server | `https://akshat-v.dev.eightfold.ai` |
 | EC2 host | `ec2-user@172.31.27.248` |
 | SSH key | `~/eightfold/id_rsa` |
-| Test users | `demo@eightfolddemo-samyak4.com` or `valerie.cote@eightfolddemo-samyak4.com` (group_id=`eightfolddemo-samyak4.com`) |
+| Test users | `akshat.v@eightfold.ai` (group_id=`volkscience.com`) — dev instance owner account; `valerie.cote@eightfolddemo-samyak4.com` (group_id=`eightfolddemo-samyak4.com`) — demo tenant candidate |
 | Server log | `/tmp/runserver.log` |
 | App request log | `/tmp/apps.logs` (Flask request-level errors go here, NOT runserver.log) |
 | Server port | `8000` (local on EC2) |
