@@ -35,11 +35,11 @@ Then build the Option C script with those values. **Do not attempt curl-to-curl 
 
 ---
 
-## Pre-entry: project-context contract (mandatory)
+## Pre-entry: work_hq contract (mandatory)
 
-On entry, invoke `Skill(skill="project-context", args="branch:read")` first. Surface one-line `↳ loaded ...` or `↳ no context yet`.
+On entry, invoke `python3 ~/.claude/work_hq/update.py get <TICKET_ID>` (work_hq) first. Surface one-line `↳ loaded ...` or `↳ no context yet`.
 
-After any material finding (auth detail, endpoint behaviour, bug), invoke `Skill(skill="project-context", args="branch:update <one-liner>")`.
+After any material finding (auth detail, endpoint behaviour, bug), invoke `python3 ~/.claude/work_hq/update.py append-context <TICKET_ID> --decision "<one-liner>"`.
 
 ---
 
@@ -162,7 +162,38 @@ PYEOF
 "
 ```
 
-**6. `utils/redis_utils.py` + `utils/counters.py` — break recursive crash on first start:**
+**6. `config/config.py` — gate not found → return False instead of raising (APP\_DEBUG mode):**
+
+Required for any page that calls `enabled_for(gate_name)` where the gate doesn't exist in the dev DB. With `APP_DEBUG=1` (set by runserver.sh), Flask raises `ValueError: Config for gate X not found` instead of returning False. Affects all CareerHub pages (`/careerhub`, `/careerhub/my-team`, etc.) — they call `get_feature_access_flags` which checks several gates that only exist in prod.
+
+```bash
+scp -i ~/eightfold/id_rsa /tmp/patch_gate.py ec2-user@172.31.27.248:/tmp/patch_gate.py 2>/dev/null || \
+ssh -i ~/eightfold/id_rsa ec2-user@172.31.27.248 "cat > /tmp/patch_gate.py << 'PYEOF'
+path = '/home/ec2-user/vscode/www/config/config.py'
+src = open(path).read()
+old = (
+    \"        if os_constants.APP_DEBUG or os.getenv('UNITTEST'):\\n\"
+    \"            raise ValueError('Config for gate %s not found. Either delete the code referencing the gate or create the gate' % config_name)\\n\"
+)
+new = (
+    \"        if os_constants.APP_DEBUG or os.getenv('UNITTEST'):\\n\"
+    \"            return False  # dev patch: gate not in dev DB, treat as disabled\\n\"
+)
+if old in src:
+    open(path, 'w').write(src.replace(old, new, 1))
+    print('patched: gate not found returns False')
+elif 'dev patch: gate not in dev DB' in src:
+    print('already patched')
+else:
+    print('ERROR: pattern not found')
+PYEOF
+"
+ssh -i ~/eightfold/id_rsa ec2-user@172.31.27.248 "python3 /tmp/patch_gate.py"
+```
+
+Verify: `grep -c 'dev patch' /home/ec2-user/vscode/www/config/config.py` → expect **3** (cannot_edit_config + _get_config except + gate not found).
+
+**7. `utils/redis_utils.py` + `utils/counters.py` — break recursive crash on first start:**
 
 These are only needed if workers crash on first start with a Redis recursion error. Check `/tmp/apps.logs` first; if no recursion errors, skip.
 
@@ -463,7 +494,7 @@ Output a table:
 
 1. PATCH all test entities back to their pre-test state (disable entities that were disabled before, delete test data if possible)
 2. Remove cookie jar: `rm -f ${COOKIEJAR}`
-3. Save findings: `Skill(skill="project-context", args="branch:update <test summary>")`
+3. Save findings: `python3 ~/.claude/work_hq/update.py append-context <TICKET_ID> --decision "<test summary>"`
 
 ---
 
