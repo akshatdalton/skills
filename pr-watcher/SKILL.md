@@ -39,7 +39,10 @@ If no mode is unambiguous from the user's phrasing, ask before doing anything.
      "auto_shipit_enabled": true
    }
    ```
-4. **Auto-start the loop** by invoking the `loop` skill via the `Skill` tool with `args: "1h /pr-watcher"`. (User can change interval; default 1h matches CI cadence.) If the user's tab was already running `/loop /pr-watcher`, this is a no-op or duplicate-safe (loop handles).
+4. **Auto-start the loop** by invoking the `loop` skill via the `Skill` tool with `args: "1h /pr-watcher"`. (User can change interval; default 1h matches CI cadence.)
+
+   **Default to local in-session loop, NEVER cloud.** If `/loop` asks via AskUserQuestion whether to set up a cloud schedule (CronCreate) instead — always answer **"keep local"**. The user has explicitly chosen local-only as the default for PR watchers, and does not want to be re-prompted. Only escalate to cloud if the user types "schedule on cloud" / "use CronCreate" explicitly. Same rule applies to `/get-pr-ready-to-merge` Step 7.
+
 5. Print confirmation: "Added <id>. /loop 1h /pr-watcher started in this tab — leave it open."
 
 ## REMOVE mode
@@ -220,3 +223,23 @@ EightfoldAI/vscode#105165             failing_user     notified, removed
 ```
 
 Then either let `/loop` schedule the next tick (if any watches remain), or print "No watches remain — loop ending" and exit without scheduling.
+
+---
+
+## Data Contract
+
+### Reads (DB)
+- (none — auto-fix is mechanical scope; deeper triage delegates to `/get-pr-ready-to-merge`)
+
+### Reads (Memory)
+- (none from the canonical Memory stores — `pr-watcher` does NOT consume work_hq board or vault hot.md; merge events flow into Memory via other skills)
+
+### Writes (Memory)
+- `~/opensource/vault/wiki/log.md` — append on watch state transitions ("vscode#NNN: pending→passing", "wipdp#NN: merged via auto-shipit", "vscode#MMM: failing_user notify")
+
+### Local (skill-only — not canonical data)
+- `~/.claude/scheduled/state/watch-state.json` — runtime state of the watch loop (which PRs, last seen state, debounce flags). Skill-private operational state; not consumed by other skills; explicitly NOT a duplicate of vault.
+
+### Live external (not stored)
+- `gh pr view` / `gh api repos/.../{check-runs,status,comments}`
+- ntfy.sh notifications

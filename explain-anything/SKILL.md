@@ -13,6 +13,23 @@ Decode/encode duality:
 
 ---
 
+## Step 0 — Vault prior context (light, conditional)
+
+Before fetching the source, try to resolve the repo from one of:
+- `cwd` → `git remote get-url origin` → repo slug
+- pasted Jira URL → board.json[task_id].repo
+- pasted GitHub PR URL → repo from URL path
+
+If repo resolves, read **last 30 lines** of `~/opensource/vault/wiki/projects/<repo>/decisions.md` and scan `~/opensource/vault/wiki/projects/<repo>/open-threads.md` for any reference to the artifact being explained (ticket ID, PR number, file paths from diff if available). If a relevant entry exists, surface inline at the top of the explanation:
+
+```
+↳ Prior context: <1-line citation from decisions.md or open-threads.md>
+```
+
+Skip silently if nothing relevant. NEVER block the explanation on this step. NEVER write DB files from this skill — explanations don't make decisions.
+
+---
+
 ## Step 1 — Fetch source first
 
 Always retrieve before explaining. Never guess.
@@ -124,4 +141,36 @@ After explanation, offer next action based on source type:
 - PR → *"/review-pr-architecture to review? /get-pr-ready-to-merge to address?"*
 - Design doc/RFC → *"/create-tech-doc to document? /work-on-jira-task to implement?"*
 
-If on a branch, run `/project-context:update` with key findings from explanation.
+If on a branch, run `work_hq append-context` with key findings from explanation.
+
+**Vault writeback (Memory-only):** append one line to `~/opensource/vault/wiki/log.md`:
+```
+<ISO-ts> explain-anything: explained <source-type> <ref> via Arc <A|B|C>
+```
+Example: `2026-05-03T18:42 explain-anything: explained PR vscode#5821 via Arc B`.
+
+If the explanation surfaced an unresolved question (user asked "wait, why is X?" with no answer in source), append H2 to `~/opensource/vault/wiki/projects/<repo>/open-threads.md` per the CLAUDE.md template. Otherwise skip.
+
+NEVER write to `decisions.md` or `learnings.md` from this skill.
+
+---
+
+## Data Contract
+
+### Reads (DB)
+- `~/opensource/vault/wiki/projects/<repo>/decisions.md` — last 30 lines, only if repo resolves (Step 0)
+- `~/opensource/vault/wiki/projects/<repo>/open-threads.md` — scan for ref to artifact, only if repo resolves (Step 0)
+- `~/opensource/vault/wiki/projects/<repo>/code-conventions.md` — only when explaining code style/patterns
+
+### Reads (Memory)
+- `~/.claude/work_hq/board.json[task_id]` — if branch has an ENG-* ticket, used to resolve repo
+
+### Writes (Memory)
+- `~/opensource/vault/wiki/log.md` — one-line append per explanation
+- `~/opensource/vault/wiki/projects/<repo>/open-threads.md` — append H2 only if unresolved question surfaces (per CLAUDE.md)
+
+### Local (skill-only)
+- (none)
+
+### Live external (not stored)
+- Atlassian MCP, GitHub MCP / `gh`, Sentry MCP, code-review-graph MCP, WebFetch — per Step 1 fetch table

@@ -13,11 +13,11 @@ description: >
 
 All code execution happens on EC2. Packages not installed locally.
 
-## Pre-entry: project-context contract (mandatory — do not skip)
+## Pre-entry: work_hq contract (mandatory — do not skip)
 
-On entry, MUST invoke `Skill(skill="project-context", args="branch:read")` so the test/debug snippet you write is informed by the branch's prior findings (key files, test env, fixtures). Surface one-line `↳ loaded ...` or `↳ no context yet`.
+On entry, MUST invoke `python3 ~/.claude/work_hq/update.py get <TICKET_ID>` (work_hq) so the test/debug snippet you write is informed by the branch's prior findings (key files, test env, fixtures). Surface one-line `↳ loaded ...` or `↳ no context yet`.
 
-After running tests or debug snippets, on any material finding (test env detail, fixture path, root cause line, sandbox URL, login), MUST invoke `Skill(skill="project-context", args="branch:update <one-line>")` and surface `↳ saved to branch context: ...`.
+After running tests or debug snippets, on any material finding (test env detail, fixture path, root cause line, sandbox URL, login), MUST invoke `python3 ~/.claude/work_hq/update.py append-context <TICKET_ID> --decision "<one-line>"` and surface `↳ saved to branch context: ...`.
 
 Never ask. Save and notify.
 

@@ -1,96 +1,131 @@
 ---
 name: checkpoint
-description: Snapshot active strategy, last action, next step, and open threads into the current branch's context file under a ## Checkpoints section. Designed to make a fresh session in this branch productive in 30 seconds. Use when user types /checkpoint, OR when the PreToolUse hook surfaces "Context at X% — run /checkpoint" reminder, OR before any major hand-off (switching branches, ending session, before compaction). Manual invocation always works; auto-invocation requires branch context to exist.
+description: Snapshot active strategy, last action, next step, and open threads into the current task's work_hq entry. Designed to make a fresh session productive in 30 seconds. Use when user types /checkpoint, OR when the PreToolUse hook surfaces "Context at X% — run /checkpoint" reminder, OR before any major hand-off (switching branches, ending session, before compaction). Manual invocation always works.
 ---
 
 # Checkpoint
 
-Append a snapshot of the active state into the branch context. The next session loads it via `/project-context:branch:read` and is productive immediately — no need to re-derive what was happening.
+Append a snapshot of the active state into the current task's work_hq entry. The next session loading the task via `update.py get <TICKET_ID>` sees the latest checkpoint and is productive immediately — no need to re-derive what was happening.
 
 ## When invoked
 
 - **Manual**: `/checkpoint` from user, or you decide to checkpoint at a logical hand-off point.
-- **Auto from hook**: PreToolUse hook injects a system reminder when context ≥78% AND last checkpoint >5 min ago AND branch context exists. When you see that reminder, invoke this skill via `Skill(skill="checkpoint")`.
+- **Auto from hook**: PreToolUse hook injects a system reminder when context ≥78% AND last checkpoint >5 min ago. When you see that reminder, invoke this skill via `Skill(skill="checkpoint")`.
 
-## File layout
+## Storage
 
-Each checkpoint is its OWN file under a sibling detail dir, named by ISO timestamp. The branch index file gets a `## Checkpoints` section listing them newest-first with one-line summaries — overview-with-lookups rule.
+Checkpoints are stored as a list inside the task's `shared_context.checkpoints` array in `~/.claude/work_hq/board.json`. Newest first. Each entry is a small object — not a separate file.
 
+```json
+{
+  "id": "ENG-191517",
+  "shared_context": {
+    "checkpoints": [
+      {"at": "2026-05-02T03:45:00Z", "phase": "...", "last_done": "...", "next": "...", "waiting_on": "...", "open_threads": ["..."], "strategy": "..."},
+      ...
+    ]
+  }
+}
 ```
-memory/branches/<branch-slug>.md                            ← branch index (gains ## Checkpoints section)
-memory/branches/<branch-slug>/
-  └── checkpoints/
-      ├── 2026-04-30T16-45-22.md                            ← one full checkpoint per file
-      ├── 2026-04-30T18-12-05.md
-      └── ...
-```
-
-Filename format: `YYYY-MM-DDTHH-MM-SS.md` (ISO-8601 minus `:` since macOS filesystems hate them). Lexicographic sort = chronological sort.
 
 ## Steps
 
-1. **Detect branch + resolve paths** — same branch-detection logic as `/project-context:branch:read`. Compute:
-   - `branch_index = memory/branches/<branch-slug>.md`
-   - `checkpoints_dir = memory/branches/<branch-slug>/checkpoints/`
-   - `checkpoint_file = <checkpoints_dir>/$(date -u +%Y-%m-%dT%H-%M-%S).md`
-   If `branch_index` doesn't exist, abort: "No branch context to checkpoint into. Seed one first." (Rare under auto-invocation — hook gates on branch index existence.)
+1. **Resolve TICKET_ID** — same identification priority as other work_hq skills:
+   - User-provided artifact in current prompt (Jira / PR URL) → highest
+   - Fallback: `git branch --show-current` → regex `ENG-\d+`
+   If neither yields a ticket, abort: *"No ticket resolvable. Cannot checkpoint without a task. Seed via /work-on-jira-task or share a Jira/PR URL."*
 
-2. **Compose the checkpoint** — fixed structure. Fill from current session state:
+2. **Compose the checkpoint** — fixed fields, fill from current session state. If any required field is unknown, skip the checkpoint entirely (a half-checkpoint is worse than none).
 
-```markdown
-# Checkpoint: <YYYY-MM-DD HH:MM TZ>
+   - **phase**: where we are — e.g., "implementing fix for review comment 3 of 5", "drafting plan after brainstorm"
+   - **last_done**: one line — the last concrete action that produced an artifact (code change, test run, push, decision)
+   - **next**: one line — the immediate next step planned
+   - **waiting_on**: user input / external dep / CI / nothing
+   - **open_threads**: array, max 5 short bullets
+   - **strategy** (optional): one short paragraph max for non-obvious mental model bits. Omit if nothing to add.
 
-**Phase**: <where we are — e.g., "implementing fix for review comment 3 of 5", "drafting plan after brainstorm">
-**Last done**: <one line — the last concrete action that produced an artifact (code change, test run, push, decision)>
-**Next**: <one line — the immediate next step planned>
-**Waiting on**: <user input / external dep / CI / nothing>
-**Open threads**:
-- <bullet>
-- <bullet>
-(max 5)
-**Strategy notes**: <one paragraph max — non-obvious mental model bits. Skip section entirely if nothing to add.>
+3. **Write to work_hq** — append (newest-first) to `shared_context.checkpoints` via `update.py`:
+
+```bash
+python3 ~/.claude/work_hq/update.py append-context <TICKET_ID> --decision "checkpoint <YYYY-MM-DD HH:MM>: phase=<...> | next=<...> | waiting=<...>"
 ```
 
-3. **Write the file** — `mkdir -p` the checkpoints dir, then write the full content to `checkpoint_file`. Never overwrite a prior checkpoint.
+For the structured version, use a small Python invocation that reads board.json, prepends the new checkpoint object to `shared_context.checkpoints`, and writes back via `update.py set` with a JSON-encoded value:
 
-4. **Update branch index** — prepend a one-line entry at the top of the `## Checkpoints` section in `branch_index`. Create the section just below the front-matter / `**Project**:` line if it doesn't exist yet. Format:
-
-```markdown
-## Checkpoints
-- 2026-04-30 16:45 — Phase: implementing fix for review comment 3 | Next: re-run EC2 tests → [checkpoints/2026-04-30T16-45-22.md](<branch-slug>/checkpoints/2026-04-30T16-45-22.md)
-- 2026-04-30 14:12 — Phase: planning approach | Next: confirm with user → [checkpoints/2026-04-30T14-12-05.md](<branch-slug>/checkpoints/2026-04-30T14-12-05.md)
+```bash
+python3 - <<EOF
+import json, os, datetime as dt
+p = os.path.expanduser("~/.claude/work_hq/board.json")
+b = json.load(open(p))
+t = next((x for x in b["tasks"] if x["id"] == "<TICKET_ID>"), None)
+assert t, "task not found"
+sc = t.setdefault("shared_context", {})
+chk = sc.setdefault("checkpoints", [])
+chk.insert(0, {
+  "at": dt.datetime.now(dt.timezone.utc).isoformat(timespec="seconds"),
+  "phase": "<phase>",
+  "last_done": "<last_done>",
+  "next": "<next>",
+  "waiting_on": "<waiting_on>",
+  "open_threads": ["<t1>", "<t2>"],
+  "strategy": "<strategy or empty>",
+})
+t["last_updated"] = chk[0]["at"]
+b["updated_at"] = chk[0]["at"]
+json.dump(b, open(p, "w"), indent=2)
+EOF
 ```
 
-Newest at the top. Do NOT delete prior entries — they form the trail.
+The `update.py append-context --decision` line is the human-readable mirror in the decisions list; the structured insert above is the canonical record.
 
-5. **Update debounce state** — write current Unix timestamp to `~/.claude/state/last-checkpoint-<session-id>.txt`.
+4. **Update debounce state** — write current Unix timestamp to `~/.claude/state/last-checkpoint-<session-id>.txt`.
 
-6. **Surface one-liner**:
-
-```
-↳ checkpoint saved: <Phase value> → <relative checkpoint path>
-```
-
-## Resume contract (used by /project-context:branch:read)
-
-When `/project-context:branch:read` loads a branch with a `## Checkpoints` section in its index file, it MUST:
-
-1. **Identify latest** — top entry of the `## Checkpoints` section (newest-first). Fallback: `ls -1 <checkpoints_dir>/*.md | sort -r | head -1` if the section is missing or malformed.
-2. **Read the latest checkpoint file fully** — load its contents into context.
-3. **Surface the resume header** before the rest of the branch index:
+5. **Surface one-liner**:
 
 ```
-↳ resuming from checkpoint <YYYY-MM-DD HH:MM>: Phase=<...>, Next=<...>
-   (waiting on: <...>; open threads: <bullet1>, <bullet2>, ...)
+↳ checkpoint saved to <TICKET_ID>: <phase> → next: <next>
 ```
 
-4. **Do NOT auto-load older checkpoints** — they're available for explicit lookup ("what was the strategy 2 hours ago?") but not in scope by default. Latest only.
+## Resume contract (used by work_hq lookup)
 
-5. If no checkpoints exist yet, skip the resume header silently.
+When `update.py get <TICKET_ID>` is called at session start (by `/ship-task`, `/work-on-jira-task`, etc.), the loader MUST:
+
+1. Read `shared_context.checkpoints[0]` (newest) if present.
+2. Surface a resume header BEFORE the rest of the task summary:
+
+```
+↳ resuming from checkpoint <YYYY-MM-DD HH:MM>: phase=<...>, next=<...>
+   (waiting on: <...>; open threads: <t1>, <t2>, ...)
+```
+
+3. Do NOT auto-load older checkpoints — they're available for explicit lookup ("what was the strategy 2 hours ago?") but not in scope by default. Latest only.
+
+4. If `checkpoints` array is empty/missing, skip the resume header silently.
 
 ## Anti-patterns
 
-- Do NOT overwrite prior checkpoints — append, never replace.
-- Do NOT save a checkpoint with empty fields — if Phase is unknown or Last done is unclear, the checkpoint is worse than no checkpoint. Skip it.
+- Do NOT overwrite prior checkpoints — prepend, never replace. The full history is the trail.
+- Do NOT save a checkpoint with empty fields — if `phase` is unknown or `last_done` is unclear, the checkpoint is worse than no checkpoint. Skip it.
 - Do NOT auto-invoke without the hook reminder being in scope — checkpoints have a real cost (interrupts work) and should fire on the explicit signal.
-- Do NOT include code snippets, full file contents, or long quotes — checkpoint is a compass, not the map. Other context layers hold the detail.
+- Do NOT include code snippets, full file contents, or long quotes — a checkpoint is a compass, not the map. Other context layers (initiative learnings, plans/) hold the detail.
+- Do NOT write to legacy `memory/branches/<branch>/checkpoints/` paths — that's the deprecated project-context location. All new checkpoints go through work_hq.
+
+---
+
+## Data Contract
+
+### Reads (DB)
+- (none — checkpoint is about current session state, not past knowledge)
+
+### Reads (Memory)
+- `~/.claude/work_hq/board.json[task_id]` — to find current task and its `shared_context.checkpoints[]`
+- session state (current branch, context window %) — live, not stored
+
+### Writes (Memory)
+- `~/.claude/work_hq/board.json[task_id].shared_context.checkpoints[]` — prepend new checkpoint (newest-first); update `last_updated` and root `updated_at`
+
+### Local (skill-only)
+- `~/.claude/state/last-checkpoint-<session-id>.txt` — debounce timestamp (ephemeral, per-session)
+
+### Live external (not stored)
+- (none)

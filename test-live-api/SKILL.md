@@ -48,11 +48,22 @@ After any material finding (auth detail, endpoint behaviour, bug), invoke `pytho
 Check first:
 ```bash
 ssh -i ~/eightfold/id_rsa -o ConnectTimeout=5 ec2-user@172.31.27.248 \
-  "curl -s http://localhost:8000/api/tether/v1/agents/ | head -c 50"
+  "curl -s -o /dev/null -w '%{http_code}' --max-time 5 http://localhost:8000/"
+# 302 = up. 000 = down.
 ```
-If connection refused → server is down. If redirect to /login → server is up, skip to Phase 1.
+If up → skip to Phase 1.
 
-### Pull branch and kill stale processes
+### Preferred: use dev_start.sh (applies all patches + starts server)
+```bash
+ssh -i ~/eightfold/id_rsa ec2-user@172.31.27.248 "/home/ec2-user/dev_start.sh [branch]"
+# Default branch: akshat/manager-agent-expand-panel
+# Applies patches A-G, verifies, starts gunicorn, polls until HTTP 302. Takes 4-6 min cold.
+```
+`dev_start.sh` is stored outside the git repo at `/home/ec2-user/dev_start.sh` and survives `git reset --hard`. If it's missing or broken, fall back to the manual patch steps below.
+
+### Manual patch steps (fallback — use dev_start.sh above instead)
+
+#### Pull branch and kill stale processes
 ```bash
 ssh -i ~/eightfold/id_rsa ec2-user@172.31.27.248 \
   "cd /home/ec2-user/vscode && \
@@ -346,7 +357,7 @@ ssh -i ~/eightfold/id_rsa ec2-user@172.31.27.248 \
    grep -c 'REDIS_CLUSTER_DEV_URI' /home/ec2-user/test_env.sh && \
    grep -c 'VS_STATIC_CDN' /home/ec2-user/test_env.sh"
 ```
-Expected: `2`, `1`, `1`, `1`. Any `0` → apply the corresponding patch from Phase 0 before proceeding.
+Expected: `3`, `1`, `1`, `1`. Any `0` → apply the corresponding patch from Phase 0 before proceeding. (config.py expects 3: cannot_edit_config + _get_config except + gate not found)
 
 **Critical: `_vs` Secure cookie fix.** The server sets the `_vs` session cookie with `Secure=True`. Python's `requests` library correctly withholds secure cookies over plain HTTP (`localhost:8000`). If not fixed, every POST gets a fresh vs_cookie → CSRF `sha1(old_vs) ≠ sha1(new_vs)` → "Please reload" 400.
 

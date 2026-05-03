@@ -87,6 +87,40 @@ Multiple matches → group by topic (same ticket/PR). One entry per topic with a
 
 ---
 
+## `current-id` Mode — Get the Current Session ID
+
+For `/search-history current-id`.
+
+The current session is the one whose most recent entry in `~/.claude/history.jsonl` matches the current project directory AND has the latest timestamp.
+
+### Steps
+
+1. Run:
+```bash
+python3 -c "
+import json, os
+project = os.getcwd()
+latest = None
+with open(os.path.expanduser('~/.claude/history.jsonl')) as f:
+    for line in f:
+        try: obj = json.loads(line)
+        except: continue
+        if obj.get('project') == project:
+            if latest is None or obj['timestamp'] > latest['timestamp']:
+                latest = obj
+if latest:
+    print(latest['sessionId'])
+"
+```
+
+2. Print the session ID and confirm the project path it matched against.
+
+3. Also show the last user message from that session so the user can verify it's the right one.
+
+No further steps needed — output and stop.
+
+---
+
 ## Limitations
 
 - Chat titles not stored — only in Claude UI sidebar
@@ -97,4 +131,4 @@ Multiple matches → group by topic (same ticket/PR). One entry per topic with a
 
 ## Workflow ending
 
-After presenting results, offer: *"Load findings into current branch context via /project-context:update?"*
+After presenting results, offer: *"Load findings into current branch context via work_hq append-context?"*

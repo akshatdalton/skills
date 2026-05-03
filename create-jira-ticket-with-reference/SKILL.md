@@ -7,11 +7,11 @@ description: Create Jira tickets by inheriting metadata (priority, sprint, label
 
 Inherit metadata from reference ticket, apply user overrides.
 
-## Pre-entry: project-context contract (mandatory — do not skip)
+## Pre-entry: work_hq contract (mandatory — do not skip)
 
-On entry, MUST invoke `Skill(skill="project-context", args="branch:read")` as the first action. This loads branch + parent project context (transitively). Surface one-line `↳ loaded ...` or `↳ no context yet`.
+On entry, MUST invoke `python3 ~/.claude/work_hq/update.py get <TICKET_ID>` (work_hq) as the first action. This loads branch + parent project context (transitively). Surface one-line `↳ loaded ...` or `↳ no context yet`.
 
-When the new ticket is created, MUST invoke `Skill(skill="project-context", args="project:update <slug> spawned new ticket ENG-XXXXX (<title>)")` to record the new ticket in the project's ticket-graph. Then surface `↳ saved to project context: ...`.
+When the new ticket is created, MUST invoke appending to `~/.claude/work_hq/initiatives/<slug>/decisions.md` (one-line) to record the new ticket in the project's ticket-graph. Then surface `↳ saved to project context: ...`.
 
 Never ask "shall I save?" — save and notify. User corrects next message if wrong.
 
@@ -122,11 +122,38 @@ Offer: *"Start `/work-on-jira-task` on ENG-XXXXX?"*
 
 ## Workflow ending
 
-Before completing, run `/project-context:update` with ticket ID, summary, and any context gathered.
+Before completing:
+1. `work_hq append-context` (existing) with ticket ID + summary + reference.
+2. **work_hq** — seed the new ticket and surface in `/today`:
+
+```bash
+python3 ~/.claude/work_hq/update.py upsert <NEW_TICKET_ID> \
+  --title "<summary>" --priority <P0|P1|P2 inherited from reference> --stage todo \
+  --jira "https://eightfoldai.atlassian.net/browse/<NEW_TICKET_ID>"
+# If reference has tag (oncall, gate-cleanup, etc.):
+python3 ~/.claude/work_hq/update.py upsert <NEW_TICKET_ID> --tag <tag>
+# If reference links to known initiative:
+python3 ~/.claude/work_hq/update.py set <NEW_TICKET_ID> --field initiative_slug=<slug>
+# Queue for /today priority placement:
+python3 ~/.claude/work_hq/update.py needs-input add <NEW_TICKET_ID> \
+  --reason "new-ticket-priority" --action "place in today/tomorrow plan"
+```
+
+Surface:
 
 ```
 ───── workflow ─────
-✓ Ticket: ENG-XXXXX created
-→ Next: /work-on-jira-task ENG-XXXXX
+✓ Ticket   : <NEW_TICKET_ID> created
+✓ Reference: <REF_TICKET_ID> (priority, sprint, labels inherited)
+✓ work_hq  : <NEW_TICKET_ID> [todo] added to board
+✓ /today   : queued for priority placement
+→ Next     : /today  (place in plan)  OR  /ship-task <NEW_TICKET_ID>
 ────────────────────
+
+───── artifacts ─────
+Jira       : https://eightfoldai.atlassian.net/browse/<NEW_TICKET_ID>
+Reference  : https://eightfoldai.atlassian.net/browse/<REF_TICKET_ID>
+Board      : ~/.claude/work_hq/board.md  → task <NEW_TICKET_ID>
+Initiative : ~/.claude/work_hq/initiatives/<slug>/   (only if linked)
+─────────────────────
 ```

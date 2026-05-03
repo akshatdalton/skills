@@ -104,8 +104,50 @@ No template: header metadata → TL;DR (written last, placed first) → sections
 
 ## Workflow ending
 
-After doc assembled, offer next action:
-- *"/create-jira-ticket-with-reference to create implementation tickets?"*
-- *"/work-on-jira-task to start building?"*
+After doc assembled:
 
-Run `/project-context:update` with doc location and key decisions made.
+1. **Initiative seeding** — agree a slug (e.g., `agent-builder`, `manager-agent-v2`) with the user. Then write into `~/.claude/work_hq/initiatives/<slug>/`:
+
+```bash
+SLUG=<slug>
+mkdir -p ~/.claude/work_hq/initiatives/$SLUG
+# Charter: top-of-doc summary + scope from this tech doc
+cat > ~/.claude/work_hq/initiatives/$SLUG/charter.md <<EOF
+# <initiative-title>
+
+## Vision
+<1-2 sentence summary>
+
+## Scope
+- <bullet>
+- <bullet>
+
+## Tech doc
+<confluence url, if posted>
+EOF
+# Touch the other 3 files so they exist for downstream skills:
+: > ~/.claude/work_hq/initiatives/$SLUG/ticket-graph.md
+: > ~/.claude/work_hq/initiatives/$SLUG/decisions.md
+: > ~/.claude/work_hq/initiatives/$SLUG/learnings.md
+# Append e2e-flow if applicable:
+[ -n "$E2E_CONTENT" ] && echo "$E2E_CONTENT" > ~/.claude/work_hq/initiatives/$SLUG/e2e-flow.md
+```
+
+2. Run `work_hq append-context` with doc location + key decisions (existing).
+
+3. Offer next action and surface artifacts:
+
+```
+───── workflow ─────
+✓ Tech doc  : <confluence url | local path>
+✓ Initiative: <slug> seeded at ~/.claude/work_hq/initiatives/<slug>/
+→ Next      : /create-jira-ticket-with-reference  (create impl tickets)
+            : /work-on-jira-task <ticket>          (start building)
+────────────────────
+
+───── artifacts ─────
+Tech doc   : <confluence url>
+Charter    : ~/.claude/work_hq/initiatives/<slug>/charter.md
+Initiative : ~/.claude/work_hq/initiatives/<slug>/
+─────────────────────
+```

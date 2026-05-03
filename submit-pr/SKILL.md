@@ -5,11 +5,11 @@ description: Create or update GitHub pull requests following team standards — 
 
 # Submit Pull Request
 
-## Pre-entry: project-context contract (mandatory — do not skip)
+## Pre-entry: work_hq contract (mandatory — do not skip)
 
-On entry, MUST invoke `Skill(skill="project-context", args="branch:read")` first. Surface one-line `↳ loaded ...` or `↳ no context yet`.
+On entry, MUST invoke `python3 ~/.claude/work_hq/update.py get <TICKET_ID>` (work_hq) first. Surface one-line `↳ loaded ...` or `↳ no context yet`.
 
-After PR is created/updated, MUST invoke `Skill(skill="project-context", args="branch:update PR #<N> created at <url>, base=<branch>")` and surface `↳ saved to branch context: ...`. Also bubble up to project layer if this PR is part of a stack: `Skill(skill="project-context", args="project:update <slug> branch <branch> → PR #<N>")`.
+After PR is created/updated, MUST invoke `python3 ~/.claude/work_hq/update.py append-context <TICKET_ID> --decision "PR #<N> created at <url>, base=<branch>"` and surface `↳ saved to branch context: ...`. Also bubble up to project layer if this PR is part of a stack: appending to `~/opensource/vault/wiki/projects/<repo>/initiatives/<slug>/decisions.md` (one-line; initiative knowledge moved from work_hq → vault on 2026-05-03).
 
 Never ask. Save and notify.
 
@@ -87,11 +87,27 @@ Fix any hook failures before re-attempting.
 
 ---
 
+## Phase 2.5 — Test gate (NEW — single push entrypoint enforcement)
+
+Before pushing, the skill confirms tests have been run.
+
+- **Invoked from `/get-pr-ready-to-merge` after fixes** OR **from `/work-on-jira-task` after Step 5 tests pass**: the upstream skill has already run tests. No prompt needed.
+- **Standalone invocation** (user types `/submit-pr` directly): prompt:
+  ```
+  Have tests been run for the changes about to push? (Y/n)
+  If no: recommended for this change:
+    • <repo-specific test command from runbooks.md>
+  ```
+  On `n` → invoke the recommended test skill (`/run-on-ec2`, `/test-live-api`, or local pytest); resume after green. On `Y` → proceed.
+  On user override `skip` → log to `~/opensource/vault/wiki/log.md`: "tests skipped — user override".
+
+This guarantees `/submit-pr` is the single push entrypoint AND that no push happens without tests (or explicit override).
+
 ## Phase 3 — Create or update PR
 
-Check existing PR via GitHub MCP `list_pull_requests` filtered by `head:<branch>`.
-- **Exists** → `update_pull_request`
-- **None** → `create_pull_request`
+Check existing PR via `gh pr view --json state,headRefName 2>/dev/null` (faster than MCP list).
+- **Exists** → **update-mode**: `gh pr edit <N> --body-file <body.md>` for description changes; `git push` for code commits. Update `board.json` last_push_at + ci_state=pending.
+- **None** → **create-mode**: `gh pr create` (or MCP `create_pull_request`).
 
 **Auto-detect repo** via `git remote get-url origin`:
 - **wipdp** → prose: Summary (2-4 sentences), JIRA TASK link, TEST PLAN (bash block). Write body to temp file, use `--body-file`.
@@ -201,17 +217,40 @@ Do **not** post top-level summary comment. Only reply to specific reviewer threa
 
 ## Workflow ending
 
-Before completing, run `/project-context:update` with PR URL and CI status.
+Before completing:
+1. `python3 ~/.claude/work_hq/update.py append-context <TICKET_ID> --decision "<PR url + CI status>"` (existing).
+2. **work_hq** — register PR on the task and advance stage:
+
+```bash
+REPO=$(git remote get-url origin | sed -E 's#.*/([^/.]+)(\.git)?$#\1#')
+python3 ~/.claude/work_hq/update.py upsert <TICKET_ID> \
+  --repo "$REPO" --branch "$(git branch --show-current)" --pr <PR_NUMBER> --stage in-review
+```
+
+Then surface:
 
 ```
 ───── workflow ─────
-✓ Ticket: ENG-XXXXX
-✓ Branch: akshat/ENG-XXXXX-short-name
-✓ PR: https://github.com/{owner}/{repo}/pull/{number}
-✓ CI: running
-→ If CI fails: /get-pr-ready-to-merge
+✓ Ticket    : ENG-XXXXX
+✓ Branch    : akshat/ENG-XXXXX-short-name
+✓ PR        : <url>
+✓ CI        : running
+✓ work_hq   : <TICKET_ID> → in-review
+→ If CI fails: /get-pr-ready-to-merge   (or /ship-task <TICKET_ID>)
 ────────────────────
+
+───── artifacts ─────
+Jira       : https://eightfoldai.atlassian.net/browse/<TICKET_ID>
+PR         : <url>
+Branch     : <repo>:<branch>
+Commit     : https://github.com/<owner>/<repo>/commit/<sha>
+Plan       : <repo>/plans/<TICKET_ID>.md   (only if exists)
+Initiative : ~/opensource/vault/wiki/projects/<repo>/initiatives/<slug>/   (only if linked; ticket-graph stays in ~/.claude/work_hq/initiatives/<slug>/)
+Board      : ~/.claude/work_hq/board.md  → task <TICKET_ID>
+─────────────────────
 ```
+
+Omit any line whose artifact wasn't created in this run.
 
 ### Auto-add to /pr-watcher (passive)
 
@@ -224,3 +263,31 @@ Surface a single line in chat:
 ```
 
 If the user objects in the next message, run `/pr-watcher remove <id>`.
+
+---
+
+## Data Contract
+
+### Reads (DB)
+- `~/opensource/vault/wiki/patterns/code-conventions.md` — PR body rules (minimal, no bullets, runnable test plan, no Co-Authored-By)
+- `~/opensource/vault/wiki/projects/<repo>/runbooks.md` — gh account switch
+- `<repo>/.github/PULL_REQUEST_TEMPLATE.md` — checklist template (in-repo, single source for the bot)
+
+### Reads (Memory)
+- `~/.claude/work_hq/board.json[task_id]` — branch, repo, ticket info, files_of_interest, current pr (for update-mode)
+
+### Writes (Memory)
+- `~/.claude/work_hq/board.json` — stage=in-review (create-mode), pr=#XXXX, last_push_at, ci_state=pending (update-mode)
+- `~/opensource/vault/wiki/projects/<repo>/initiatives/<slug>/decisions.md` — append PR-creation/update line if part of an initiative stack
+- `~/opensource/vault/wiki/hot.md` — active state → in-review or "pushed update to PR#XXXX"
+- `~/opensource/vault/wiki/log.md` — "submitted vscode#XXXX" or "pushed update to vscode#XXXX"
+
+### Local (skill-only)
+- temp files for PR body via `--body-file` (ephemeral)
+
+### Live external (not stored)
+- `gh pr create` / `gh pr edit` / `git push`
+- Atlassian MCP — for IMPL → ENG resolution
+
+### Side effect
+- in create-mode, auto-start `/pr-watcher add <pr>`

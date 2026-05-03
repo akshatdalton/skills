@@ -11,11 +11,11 @@ description: >
 
 Goal: pinpoint exact line and reason — not just reproduce.
 
-## Pre-entry: project-context contract (mandatory — do not skip)
+## Pre-entry: work_hq contract (mandatory — do not skip)
 
-On entry, MUST invoke `Skill(skill="project-context", args="branch:read")` first — prior findings often pinpoint the area to investigate. Surface one-line `↳ loaded ...` or `↳ no context yet`.
+On entry, MUST invoke `python3 ~/.claude/work_hq/update.py get <TICKET_ID>` (work_hq) first — prior findings often pinpoint the area to investigate. Surface one-line `↳ loaded ...` or `↳ no context yet`.
 
-The moment you locate the failing line, MUST invoke `Skill(skill="project-context", args="branch:update root cause: <file>:<line> — <reason>")` and surface `↳ saved to branch context: ...`. Same for any tracing insight (call chain, gate behavior, env config) — save immediately, never batch to the end.
+The moment you locate the failing line, MUST invoke `python3 ~/.claude/work_hq/update.py append-context <TICKET_ID> --decision "root cause: <file>:<line> — <reason>"` and surface `↳ saved to branch context: ...`. Same for any tracing insight (call chain, gate behavior, env config) — save immediately, never batch to the end.
 
 Never ask. Save and notify.
 
@@ -150,4 +150,4 @@ uv run pytest ...
 After pinpointing failure, offer next action:
 - *"/create-jira-ticket-with-reference to track bug? Or fix directly via /work-on-jira-task?"*
 
-Run `/project-context:update` with root cause, exact file:line, and proposed fix.
+Run `work_hq append-context` with root cause, exact file:line, and proposed fix.
