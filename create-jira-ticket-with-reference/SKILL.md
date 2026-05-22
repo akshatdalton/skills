@@ -7,11 +7,23 @@ description: Create Jira tickets by inheriting metadata (priority, sprint, label
 
 Inherit metadata from reference ticket, apply user overrides.
 
-## Pre-entry: work_hq contract (mandatory — do not skip)
+## Pre-entry: vault context check (v0.2)
 
-On entry, MUST invoke `python3 ~/.claude/work_hq/update.py get <TICKET_ID>` (work_hq) as the first action. This loads branch + parent project context (transitively). Surface one-line `↳ loaded ...` or `↳ no context yet`.
+On entry, check whether the reference ticket has a vault progress directory and surface its initiative context:
 
-When the new ticket is created, MUST invoke appending to `~/.claude/work_hq/initiatives/<slug>/decisions.md` (one-line) to record the new ticket in the project's ticket-graph. Then surface `↳ saved to project context: ...`.
+```bash
+# Probe vault first (single source of truth)
+for repo in vscode wipdp; do
+  for d in progress progress/archive; do
+    p=~/opensource/vault/wiki/projects/$repo/$d/<REF_TICKET_ID>
+    [ -d "$p" ] && awk '/^---$/{c++; if(c==2)exit; next} c==1{print}' "$p/progress.md" && break 2
+  done
+done
+```
+
+Surface one-line: `↳ loaded vault context: project=<repo> initiative=<slug>` or `↳ no vault context yet`.
+
+> **Note:** the legacy `~/.claude/work_hq/initiatives/<slug>/decisions.md` ticket-graph file is no longer maintained (v0.2 — moved to vault learnings.md "## Initiative: <slug>" sections on 2026-05-13). The new ticket's relationship to its initiative is captured in the vault progress.md frontmatter `initiative:` field set in Step 7.
 
 Never ask "shall I save?" — save and notify. User corrects next message if wrong.
 
@@ -39,12 +51,25 @@ User overrides take precedence. "Assign to me" → `lookupJiraAccountId`. No sum
 
 ### Step 4 — Create ticket
 
+**Description formatting (mandatory):** Always pass `contentFormat: "markdown"`. Build the description with actual newline characters — NOT escaped `\n` sequences. Write the description to a temp file first, then read it back to guarantee proper encoding:
+
+```bash
+cat > /tmp/jira_desc.md << 'EOF'
+<description body with real newlines>
+
+**Related Context:** <parent/reference ticket context>
+EOF
+```
+
+Then paste the content (read from the file) as the `description` parameter. This is the same discipline as `/submit-pr`'s `--body "$(cat file)"` — it prevents `\n` from rendering as literal backslash-n in the Jira UI.
+
 ```
 cloudId:          eightfoldai.atlassian.net
 projectKey:       ENG  (or user-specified)
 issueTypeName:    Story  (or user-specified)
 summary:          <user-provided>
-description:      <user-provided> + optional Related Context
+description:      <content of /tmp/jira_desc.md — actual newlines>
+contentFormat:    markdown
 parent:           <parent.key> (omit if absent)
 assignee_account_id: <resolved>
 additional_fields:
@@ -73,6 +98,64 @@ Labels:        [backend]
 Missing fields: `not set on reference — skipped`.
 
 ---
+
+### Step 7 — Vault progress seed (PRIMARY — single source of truth for ticket state)
+
+After ticket creation, immediately seed the vault progress directory. **The vault is the primary source of truth for per-ticket state.** work_hq writes (in the workflow-ending section below) are TRANSITIONAL and will be removed once `/today` and other state-machine skills migrate to read the vault directly.
+
+```bash
+mkdir -p ~/opensource/vault/wiki/projects/<repo>/progress/<NEW_TICKET_ID>/
+```
+
+Determine `<repo>` (`vscode` or `wipdp`):
+- From the reference ticket's `repo` field if known
+- From the user's cwd (`git remote get-url origin`)
+- From the description / parent epic context
+
+Create `~/opensource/vault/wiki/projects/<repo>/progress/<NEW_TICKET_ID>/progress.md`:
+
+```markdown
+---
+ticket: <NEW_TICKET_ID>
+title: "<summary>"
+project: <repo>
+branch: null
+pr: null
+pr_state: null
+state: new
+priority: <P0|P1|P2 inherited from reference>
+created: <today YYYY-MM-DD>
+last-touched: <today YYYY-MM-DD>
+session_ids: []
+---
+
+# <NEW_TICKET_ID> — <summary>
+
+## Jira summary
+
+<description from create response, OR what the user gave you when asked for summary>
+
+## Status
+
+Created from reference ENG-XXXXX. Not yet started. No branch, no PR.
+
+## What's next (when work begins)
+
+Fire `/brain-recall <NEW_TICKET_ID>` then `/work-on-jira-task <NEW_TICKET_ID>` to scope and implement.
+
+## Key references
+
+- Jira: https://eightfoldai.atlassian.net/browse/<NEW_TICKET_ID>
+- Reference ticket: https://eightfoldai.atlassian.net/browse/<REF_TICKET_ID>
+- Plan: (none yet — will be written here when /work-on-jira-task or /think generates one)
+```
+
+Surface inline (not as a question):
+```
+↳ vault progress seeded: projects/<repo>/progress/<NEW_TICKET_ID>/
+```
+
+## After creation
 
 ## After creation
 Offer: *"Start `/work-on-jira-task` on ENG-XXXXX?"*
@@ -117,43 +200,41 @@ Offer: *"Start `/work-on-jira-task` on ENG-XXXXX?"*
 | "Invalid priority" | Wrong format | Must be `{"id": "string"}` |
 | Reference not found | Missing/no access | Offer create without metadata |
 | Field missing on reference | Not set | Skip silently |
+| Literal `\n\n` visible in Jira description UI | Escaped newlines in payload | Use temp file + `contentFormat: "markdown"` (Step 4) |
 
 ---
 
-## Workflow ending
+## Workflow ending (vault primary, derived board refresh)
 
-Before completing:
-1. `work_hq append-context` (existing) with ticket ID + summary + reference.
-2. **work_hq** — seed the new ticket and surface in `/today`:
+The vault progress.md (Step 7) IS the source of truth for the new ticket. After writing it, refresh the derived board.json so legacy skill consumers (work-on-jira-task, ship-task, submit-pr, get-pr-ready-to-merge, etc.) see the new ticket immediately:
 
 ```bash
-python3 ~/.claude/work_hq/update.py upsert <NEW_TICKET_ID> \
-  --title "<summary>" --priority <P0|P1|P2 inherited from reference> --stage todo \
-  --jira "https://eightfoldai.atlassian.net/browse/<NEW_TICKET_ID>"
-# If reference has tag (oncall, gate-cleanup, etc.):
-python3 ~/.claude/work_hq/update.py upsert <NEW_TICKET_ID> --tag <tag>
-# If reference links to known initiative:
-python3 ~/.claude/work_hq/update.py set <NEW_TICKET_ID> --field initiative_slug=<slug>
-# Queue for /today priority placement:
-python3 ~/.claude/work_hq/update.py needs-input add <NEW_TICKET_ID> \
-  --reason "new-ticket-priority" --action "place in today/tomorrow plan"
+python3 ~/.claude/work_hq/update.py regenerate-from-vault
 ```
 
-Surface:
+This walks the vault and rebuilds board.json as a derived view — fast, idempotent. Surface inline:
+
+```
+↳ board.json regenerated from vault (36 tasks)
+```
+
+Then surface the final summary:
 
 ```
 ───── workflow ─────
 ✓ Ticket   : <NEW_TICKET_ID> created
 ✓ Reference: <REF_TICKET_ID> (priority, sprint, labels inherited)
-✓ work_hq  : <NEW_TICKET_ID> [todo] added to board
-✓ /today   : queued for priority placement
-→ Next     : /today  (place in plan)  OR  /ship-task <NEW_TICKET_ID>
+✓ Vault    : projects/<repo>/progress/<NEW_TICKET_ID>/progress.md (PRIMARY — source of truth)
+✓ Board    : ~/.claude/work_hq/board.json regenerated from vault (derived view for legacy skills)
+→ Next     : /brain-recall <NEW_TICKET_ID> then /work-on-jira-task  OR  /ship-task <NEW_TICKET_ID>
 ────────────────────
 
 ───── artifacts ─────
 Jira       : https://eightfoldai.atlassian.net/browse/<NEW_TICKET_ID>
 Reference  : https://eightfoldai.atlassian.net/browse/<REF_TICKET_ID>
-Board      : ~/.claude/work_hq/board.md  → task <NEW_TICKET_ID>
-Initiative : ~/.claude/work_hq/initiatives/<slug>/   (only if linked)
+Vault      : ~/opensource/vault/wiki/projects/<repo>/progress/<NEW_TICKET_ID>/progress.md
+Board      : ~/.claude/work_hq/board.json (derived; refreshed via regenerate-from-vault)
 ─────────────────────
 ```
+
+> **No more direct work_hq writes.** Previous TRANSITIONAL `update.py upsert/needs-input add` calls have been removed in v0.2 (2026-05-13). Vault progress.md frontmatter carries `needs_input` directly when relevant; board.json is regenerated from vault on every ticket creation.

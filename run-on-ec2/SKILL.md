@@ -56,7 +56,13 @@ ipython
 ```bash
 ssh -o ConnectTimeout=5 -i ~/eightfold/id_rsa -o StrictHostKeyChecking=no ec2-user@172.31.27.248 echo ok 2>&1
 ```
-Fails → *"VPN appears down — connect and retry."* Do not proceed.
+Fails → connect via:
+```bash
+~/eightfold/vpn-connect.sh -y     # -y auto-kills any stale connection; ~5–10s
+```
+Then re-run the VPN check. Disconnect with `~/eightfold/vpn-disconnect.sh`. Full automation details (Keychain pass, TOTP, sudoers) in `~/opensource/vault/wiki/projects/vscode/learnings.md` → "VPN automation".
+
+**Note:** the openvpn process backgrounded by `vpn-connect.sh` does NOT survive across Bash tool invocations (harness reaps it after each shell exits). Re-run `vpn-connect.sh -y` immediately before each SSH if the prior connection dropped.
 
 ### Push then SSH+run
 
@@ -194,3 +200,32 @@ nohup <command> > /tmp/output.log 2>&1 </dev/null & disown && echo started
 - `&& echo started` — confirm backgrounded
 
 **Pipe chains eat exit codes.** `cmd | tail -30 && echo OK` always prints OK — `tail` always exits 0. Never use to verify success. Check exit code separately.
+
+---
+
+## Long pytest under flaky VPN — detach + poll
+
+When the VPN is unstable, a single synchronous `ssh ec2 "<long pytest>"` will die if VPN drops mid-run. Detach the work from the SSH session so reconnects don't kill it:
+
+**1. Kick off detached** (the SSH command itself can disconnect after `echo backgrounded` — the work is already running):
+```bash
+ssh -o ConnectTimeout=10 -i ~/eightfold/id_rsa -o StrictHostKeyChecking=no ec2-user@172.31.27.248 \
+  "rm -f /tmp/pytest-<TICKET>.log && \
+   nohup bash -c 'source /home/ec2-user/test_env.sh && \
+     source /home/ec2-user/py3.13-virt/bin/activate && \
+     cd /home/ec2-user/vscode/www && \
+     PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 pytest <test_paths> -v --noconftest; \
+     echo PYTEST_DONE_EXIT=\$?' > /tmp/pytest-<TICKET>.log 2>&1 </dev/null & disown && echo backgrounded"
+```
+
+**2. Poll** (reconnect VPN if needed first via `~/eightfold/vpn-connect.sh -y`):
+```bash
+ssh -o ConnectTimeout=10 -i ~/eightfold/id_rsa -o StrictHostKeyChecking=no ec2-user@172.31.27.248 \
+  "tail -30 /tmp/pytest-<TICKET>.log ; echo '---' ; pgrep -fa 'pytest.*<keyword>' || echo done"
+```
+
+**Completion signals:**
+- `PYTEST_DONE_EXIT=N` line in the log → pytest finished, N = exit code
+- `pgrep` returns no hits → process is gone
+
+The `\$?` (escaped) captures pytest's exit code inside the inner bash -c. The bash escaping is critical — `$?` unescaped would expand in the outer shell, always to 0. Trailing `echo done` on the pgrep line ensures non-zero pgrep exit doesn't mask intent.

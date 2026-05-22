@@ -1,0 +1,8 @@
+# Local-only — exclude from sync-skills push
+scripts/.venv/
+scripts/__pycache__/
+scripts/*.pyc
+
+# Downloaded by setup.sh — not committed
+scripts/models/*.tflite
+scripts/models/*.task

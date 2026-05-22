@@ -1,134 +1,175 @@
 ---
 name: search-history
 description: >
-  Search past Claude Code conversation sessions using vague hints. Greps
-  ~/.claude/history.jsonl, extracts the matching thread, and summarizes it.
+  Search past Claude Code conversation sessions using vague hints.
   Trigger when user says "find that chat where...", "search my history for...",
-  "remember when we did X", or asks to locate a past session.
+  "remember when we did X", asks to locate a past session, or asks about
+  activity in a date range ("what did I work on last week?", "show sessions from May 10-17").
 ---
 
 # Search Chat History
 
-Find past sessions or summarize recent activity.
+## CRITICAL: Always use extract_transcripts.py
+
+**NEVER grep `~/.claude/history.jsonl` directly.** That file only indexes CLI sessions and
+misses all desktop app sessions. The authoritative source is:
+
+```
+~/.claude/scripts/extract_transcripts.py
+```
+
+Use it for every mode below without exception.
 
 ---
 
-## Default Mode — Activity Summary
+## Mode Selection
 
-For "what have I worked on?", "what did I do this week?", date ranges without keywords.
+| User intent | Mode |
+|---|---|
+| Date range / activity overview | **Date Range** |
+| "find that chat where..." / keyword | **Keyword Search** |
+| "show full transcript of session X" | **Full Transcript** |
+| "current-id" | **Current Session ID** |
 
-### 1 — Date range
-Parse: "this week" → Mon 00:00 to now, "past 3 days" → 3d ago, "last week" → prev Mon-Sun. Convert relative → absolute timestamps.
+---
 
-### 2 — Extract sessions
+## Date Range Mode
+
+For: "what did I work on this week?", "show sessions May 10–17", "last 3 days", etc.
+
+### Step 1 — Run summary
+
 ```bash
-python3 -c "
-import json
-from datetime import datetime
-cutoff = datetime(YYYY, MM, DD).timestamp() * 1000
-for line in open('$HOME/.claude/history.jsonl'):
-    try: obj = json.loads(line)
-    except: continue
-    if obj.get('timestamp', 0) >= cutoff:
-        print(line.strip())
-" > /tmp/filtered_history.jsonl
+python3 ~/.claude/scripts/extract_transcripts.py \
+  --from "FROM_DATE" \
+  --to "TO_DATE" \
+  --format summary
 ```
 
-### 3 — Aggregate by topic
-Group by: ticket IDs (ENG-*, IMPL-*), PRs, skills invoked, repos. Earlier messages = context, later = resolution.
+Accepted date formats: `"2026-05-10"`, `"7 days ago"`, `"last monday"`, `"yesterday"`, `"today"`.
+Omit `--to` to default to now. Add `--project NAME` to scope to one project.
 
-### 4 — Present
+Examples:
+```bash
+python3 ~/.claude/scripts/extract_transcripts.py --from "last monday" --to "today" --format summary
+python3 ~/.claude/scripts/extract_transcripts.py --from "2026-05-10" --to "2026-05-17" --format summary
+python3 ~/.claude/scripts/extract_transcripts.py --from "7 days ago" --project magnetx --format summary
+```
+
+### Step 2 — Present grouped by project
+
 ```
 ## Activity: [date range]
-### By Ticket
-- ENG-XXXXX: [what done] (dates)
-### PRs
-- repo#123: [status] (date)
-### Key Decisions
-- [notable decisions/learnings]
+
+### ~/opensource/magnetx  (3 sessions)
+- 2026-05-16 · abc123… · 61u/121a turns · "can you fetch: ..."
+- ...
+
+### ~/eightfold/wipdp  (8 sessions)
+- ...
+
+### Themes
+- [what was worked on, decisions, tickets]
 ```
 
-### 5 — Offer git log cross-reference
-After summary: *"Check `git log --author=Akshat --since=DATE` for commits not in chat?"*
-Run automatically if user asked in prompt.
+### Step 3 — Offer git cross-reference
+
+Offer: *"Check `git log --author=Akshat --since=DATE` for commits not in chat?"*
 
 ---
 
-## Keyword Mode — Find specific session
+## Keyword Search Mode
 
-For "find that chat where...", "remember when we...".
+For: "find that chat where...", "remember when we did X", "session about topic Y".
 
-### 1 — Extract keywords
-2-4 concrete: function names, emails, errors, filenames, endpoints.
+### Step 1 — Run summary over a wide window, then grep the JSONL files
 
-### 2 — Grep
 ```bash
-grep -n "keyword1\|keyword2" ~/.claude/history.jsonl -i | head -50
+# Get candidate sessions
+python3 ~/.claude/scripts/extract_transcripts.py \
+  --from "30 days ago" --format summary 2>&1 | grep -i "KEYWORD"
 ```
-Too many → narrow. Zero → synonyms or shorter substrings.
 
-### 3 — Get sessionId
-Most relevant line → extract `sessionId`.
+If that surfaces candidates, note their session IDs. Then grep the raw JSONL for precision:
 
-### 4 — Extract thread
 ```bash
-grep "SESSION_ID" ~/.claude/history.jsonl
+grep -ril "KEYWORD" ~/.claude/projects/ --include="*.jsonl" | grep -v subagents
 ```
-Parse `display` field in timestamp order.
 
-### 5 — Present
-- **Session ID** + **date** (timestamp ms → human)
-- **Summary**: what was debugged/built/discussed
-- **Messages** in order: user asked, action taken
-- Note hashed `pastedContents` (unrecoverable) vs readable
+### Step 2 — Extract full transcript of matching session
 
-### 6 — Deduplicate
-Multiple matches → group by topic (same ticket/PR). One entry per topic with all session dates.
+```bash
+python3 ~/.claude/scripts/extract_transcripts.py \
+  --session SESSION_UUID_PREFIX \
+  --format markdown
+```
+
+### Step 3 — Present
+
+- **Session ID** + **date** + **project**
+- **Summary**: what was debugged/built/decided
+- Key messages in order
+- Group duplicates by topic
 
 ---
 
-## `current-id` Mode — Get the Current Session ID
+## Full Transcript Mode
+
+For: "show me the full transcript of session X" or analyzing a specific session.
+
+```bash
+# Readable
+python3 ~/.claude/scripts/extract_transcripts.py \
+  --session SESSION_UUID_PREFIX \
+  --format markdown
+
+# Structured (for analysis / training data)
+python3 ~/.claude/scripts/extract_transcripts.py \
+  --session SESSION_UUID_PREFIX \
+  --format jsonl
+```
+
+To export a date range to files:
+```bash
+python3 ~/.claude/scripts/extract_transcripts.py \
+  --from "2026-05-10" --to "2026-05-17" \
+  --format jsonl \
+  --out ~/transcripts/
+```
+
+---
+
+## Current Session ID Mode
 
 For `/search-history current-id`.
 
-The current session is the one whose most recent entry in `~/.claude/history.jsonl` matches the current project directory AND has the latest timestamp.
-
-### Steps
-
-1. Run:
 ```bash
 python3 -c "
-import json, os
+import os
+from pathlib import Path
 project = os.getcwd()
-latest = None
-with open(os.path.expanduser('~/.claude/history.jsonl')) as f:
-    for line in f:
-        try: obj = json.loads(line)
-        except: continue
-        if obj.get('project') == project:
-            if latest is None or obj['timestamp'] > latest['timestamp']:
-                latest = obj
-if latest:
-    print(latest['sessionId'])
+proj_dir = project.replace('/', '-').lstrip('-')
+p = Path.home() / '.claude' / 'projects' / proj_dir
+if p.exists():
+    files = sorted([f for f in p.glob('*.jsonl') if 'subagents' not in str(f)],
+                   key=lambda x: x.stat().st_mtime, reverse=True)
+    if files:
+        print(files[0].stem)
 "
 ```
 
-2. Print the session ID and confirm the project path it matched against.
-
-3. Also show the last user message from that session so the user can verify it's the right one.
-
-No further steps needed — output and stop.
+Print the session ID and the project it matched. Show last user message to confirm.
 
 ---
 
 ## Limitations
 
-- Chat titles not stored — only in Claude UI sidebar
-- Hashed pasted content (`contentHash`) unrecoverable
-- Multiple matches → group by topic, let user pick
+- Thinking block content is not stored (empty in JSONL) — not recoverable
+- Sessions auto-delete after 30 days (set `cleanupPeriodDays` in `~/.claude/settings.json` to extend)
+- `history.jsonl` — do not use, incomplete
 
 ---
 
 ## Workflow ending
 
-After presenting results, offer: *"Load findings into current branch context via work_hq append-context?"*
+After presenting results, offer: *"Want me to export these sessions as JSONL for training data?"*

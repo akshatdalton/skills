@@ -112,11 +112,15 @@ Script reads AWS creds from `~/eightfold/wipdp/.env`. On AccessDenied/NoSuchKey,
 
 ### D. PR description / checklist failures
 
-All PR body rules live in `/submit-pr` (single source of truth — checklist rules, mandatory sections, self-validation). To fix:
-1. Follow `/submit-pr` Phase 3–4: read template with **Read tool**, fill checklist, self-validate
-2. Also compare bidirectionally — bot may inject extra mandatory items not in template
-3. Write body to temp file → `--body-file` → `update_pull_request`
-4. Post `needs_ci` comment to re-trigger validation
+**All PR body rules live in `/submit-pr` (single source of truth — repo-aware shape, checklist rules, mandatory sections, self-validation, anti-patterns).** This skill does NOT write body markdown directly.
+
+Workflow:
+1. Read the failure signal from `/tmp/pr-<N>-comments.json` — bot complaint specifics (which mandatory item, which malformed URL, which missing section, etc.). Also compare against the template bidirectionally — the bot can inject mandatory items not in the source template.
+2. Identify what needs to change as concrete one-liners (e.g., "needs `[x] DP` row checked", "gate URL has malformed query param", "missing `## TEST PLAN:` section").
+3. **Hand off to `/submit-pr` update-mode** to produce + push the corrected body. /submit-pr will read the template fresh, apply the fix, run its full Phase 4 self-validation (now repo-aware — vscode checklist or wipdp prose), then `gh pr edit --body-file`.
+4. After the body push completes, post a `needs_ci` comment to re-trigger validation (body-only fix, no code commit — see Step 6 Group 0 for the rule).
+
+**Do not edit the PR body inline in this skill.** /submit-pr's Phase 4 catches anti-patterns this skill won't (vscode checklist sub-tree bleeding into wipdp, missing `## SUMMARY:` headers, unfilled `<sandbox>` placeholders). Bypassing it = regressions.
 
 ### E. Impact analysis (code-review-graph)
 
@@ -179,15 +183,15 @@ If "agree" → proceed to existing approval flow below.
 
 **Never commit/push without explicit user approval.**
 
-Group 0: follow `/submit-pr` Phase 3–4 rules (single source of truth for checklist) → fix body → `update_pull_request` → `needs_ci` comment.
+Group 0 (body-only fixes, no code commit): **MUST delegate to `/submit-pr` update-mode.** Do not write the corrected body inline. /submit-pr Phase 3–4 owns: repo-aware shape (vscode checklist or wipdp prose), template re-read, self-validation, `--body-file` push. After /submit-pr returns, post `needs_ci` comment to re-trigger validation.
 
 **Critical:** `needs_ci` is **body-only**. After pushing code (Groups 1-3), do NOT post `needs_ci` — the push itself triggers CI. Posting it after a code push double-fires and confuses the bot. Only Group 0 (pure metadata edits with no commit) gets `needs_ci`.
 
-Groups 1–3: implement → show changes → **test recommendation step (see below)** → ask approval → **delegate push to `/submit-pr` update-mode** → **post pending replies** (from the table column) → **resolve every thread marked ✅** in the table.
+Groups 1–3: implement → show changes → **classify the diff for tests (see below)** → ask approval → **delegate push to `/submit-pr` update-mode** (which owns Phase 2.5 test gate — don't gate tests here, you'd double-prompt) → **post pending replies** (from the table column) → **resolve every thread marked ✅** in the table.
 
-### Test recommendation step (between fix and push)
+### Diff classifier for test recommendation
 
-Before invoking `/submit-pr`, surface recommended tests based on repo + change diff. The skill does NOT push directly — `/submit-pr` is the single push entrypoint.
+`/submit-pr` Phase 2.5 owns the actual test gate (prompt + run + log-on-skip). This skill's only job here is to **surface the right test command(s)** for /submit-pr's prompt — based on what the PR diff touches. Don't run the gate yourself.
 
 ```
 if repo == "wipdp":
@@ -207,15 +211,7 @@ else (magnetx, etc.):
     based on repo's runbooks.md or skip with explicit note
 ```
 
-Surface to user:
-```
-Recommended tests before push:
-  • <skill or command> <args>
-  • <skill or command> <args>   (if change touches multiple layers)
-Run these now? (y/skip)
-```
-
-On `y` → invoke recommended skill(s); wait for green. On `skip` → log to `~/opensource/vault/wiki/log.md`: "tests skipped — user override on PR#<N>". Then in either case, hand off to `/submit-pr` update-mode.
+Pass the classified command(s) to /submit-pr update-mode (or surface as a hint before invoking it). /submit-pr's Phase 2.5 will then prompt: *"Have tests been run? (Y/n) Recommended: <cmd>"* and gate the push accordingly. If this skill already ran tests successfully in this turn, /submit-pr Phase 2.5 documents the upstream-skill case and skips the prompt automatically.
 
 **Hard rule on thread resolution.** A reviewer comment isn't "addressed" until its thread is `isResolved=true`. Some Eightfold CI commit-status checks (and reviewers' merge gates) only pass when 0 unresolved threads remain. After every code push or reply, walk the table and resolve each ✅ row. Don't leave this for "next iteration" — a stale unresolved thread keeps the PR red.
 
