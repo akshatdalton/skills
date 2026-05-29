@@ -29,38 +29,47 @@ Stateless skill sessions accumulate knowledge in conversation that dies on `/cle
         plan.md
 ```
 
-Active v0 projects: **vscode** and **wipdp** ONLY.
+Active v0 projects: **vscode**, **wipdp**, and **magnetx**.
+
+**magnetx differs:** no Jira tickets; uses initiative names (`build-mvp`, `yt-shorts`, `landing`) instead of `ENG-XXXXX`; no GitHub PR merge detection (Notion is the task lifecycle source of truth); GitHub account is `akshatdalton`, not `EightfoldAI`.
 
 ## Invocation forms
 
 | Form | Behavior |
 |---|---|
-| `/brain-ingest <ticket>` | Per-ticket distill + uplift. Writes session content into `progress/<ticket>/progress.md`. **Always** uplifts settled+tentative learnings to `learnings.md` (tentative ones get a PR-state tag). On first ingest, copies any matching plan to `progress/<ticket>/plan.md`. On detected merge: strips PR-state tags from prior uplifted entries, then moves the progress dir to `archive/`. |
-| `/brain-ingest` (no arg) | Catch-up sweep using `last_sync_timestamp`. Distills project-level learnings (not tied to a specific ticket) into `learnings.md`. |
+| `/brain-ingest <ticket>` | **vscode/wipdp.** Per-ticket distill + uplift. Writes session content into `progress/<ticket>/progress.md`. **Always** uplifts settled+tentative learnings to `learnings.md` (tentative ones get a PR-state tag). On first ingest, copies any matching plan to `progress/<ticket>/plan.md`. On detected merge: strips PR-state tags from prior uplifted entries, then moves the progress dir to `archive/`. |
+| `/brain-ingest <initiative>` | **magnetx only.** Same as above but `<initiative>` = `build-mvp` \| `yt-shorts` \| `landing` \| etc. No PR merge detection; no `[in-review]` tags needed. `archive/` move happens when user confirms the initiative is done. |
+| `/brain-ingest` (no arg) | Catch-up sweep using `last_sync_timestamp`. Distills project-level learnings (not tied to a specific ticket/initiative) into `learnings.md`. |
 | `/brain-ingest <project> --sweep` | Same as above with explicit project. |
 
-## Per-ticket flow (`/brain-ingest ENG-XXXXX`)
+## Per-task flow (`/brain-ingest ENG-XXXXX` or `/brain-ingest <initiative>`)
 
 ### Step 1 — Resolve project
-cwd → repo, or directory-existence probe (`projects/<vscode|wipdp>/progress/<ENG-XXXXX>/` or archive), or branch.
-If neither exists, fall back to `gh pr list --search "ENG-XXXXX" --repo EightfoldAI/<repo>` for both repos to determine which one owns the ticket.
 
-### Step 2 — Locate or BOOTSTRAP ticket directory
+**vscode/wipdp path:**
+cwd → repo slug (`vscode` or `wipdp`), or directory-existence probe (`projects/{vscode,wipdp}/progress/<ENG-XXXXX>/` or archive), or branch `akshat/ENG-XXXXX-*`.
+If neither resolves, fall back to `gh pr list --search "ENG-XXXXX" --repo EightfoldAI/<repo>` for both repos.
 
-**This step is mandatory. Do NOT skip even if dir is missing.** If `progress/<ENG-XXXXX>/` doesn't exist, **YOU MUST create it**. Bootstrapping a missing dir is your primary responsibility on first ingest — not an error.
+**magnetx path:**
+cwd path contains `/opensource/magnetx`, or `git remote get-url origin` returns `akshatdalton/magnetx`, or arg has no `ENG-` prefix and a probe of `projects/magnetx/progress/<arg>/` succeeds → project = `magnetx`.
+No Jira/PR lookup needed. GitHub account is `akshatdalton`.
 
-- Check `<vault>/projects/<project>/progress/<ENG-XXXXX>/` (active)
-- Check `<vault>/projects/<project>/progress/archive/<ENG-XXXXX>/` (already-merged; if found, abort with "ticket already archived; nothing to ingest" — unless user explicitly says re-ingest)
-- If neither: `mkdir -p <vault>/projects/<project>/progress/<ENG-XXXXX>/` AND continue to Step 3
+### Step 2 — Locate or BOOTSTRAP ticket/initiative directory
+
+**This step is mandatory. Do NOT skip even if dir is missing.** If the directory doesn't exist, **YOU MUST create it**. Bootstrapping is your primary responsibility on first ingest — not an error.
+
+- Check `<vault>/projects/<project>/progress/<ticket-or-initiative>/` (active)
+- Check `<vault>/projects/<project>/progress/archive/<ticket-or-initiative>/` (already archived; if found, abort with "already archived; nothing to ingest" — unless user explicitly says re-ingest)
+- If neither: `mkdir -p <vault>/projects/<project>/progress/<ticket-or-initiative>/` AND continue to Step 3
 
 ### Step 3 — Bootstrap progress.md if missing
 
-Create `progress.md` with frontmatter:
+**vscode/wipdp — use this frontmatter:**
 ```yaml
 ---
 ticket: ENG-XXXXX
 title: <fetch via gh pr view OR Atlassian MCP getJiraIssue>
-project: <project>
+project: <vscode|wipdp>
 branch: <git branch>
 pr: <number or null>
 pr_state: <OPEN|MERGED|CLOSED or null>
@@ -76,8 +85,27 @@ session_ids: []
 (body to be filled by Step 5)
 ```
 
+**magnetx — use this frontmatter instead:**
+```yaml
+---
+task: <initiative name, e.g. build-mvp>
+title: <human-readable title>
+project: magnetx
+notion-task: <Notion task URL or null>
+state: <scaffolded|in-progress|blocked|done>
+last-touched: <today YYYY-MM-DD>
+session_ids: []
+---
+
+# <initiative> — <title>
+
+(body to be filled by Step 5)
+```
+*No `branch`, `pr`, `pr_state`, or `priority` fields for magnetx — those are Jira/GitHub concepts.*
+
 ### Step 4 — Plan file handling (per CLAUDE.md "Plan file convention")
 
+**vscode/wipdp:**
 1. Check `<vault>/projects/<project>/progress/<ENG-XXXXX>/plan.md` first. If it already exists (a plan-creating skill wrote it directly per convention), **do not overwrite**. Skip plan migration.
 2. Otherwise, look for legacy plan in `~/.claude/plans/`:
    - First: `~/.claude/plans/tickets/ENG-XXXXX.md` (exact match)
@@ -85,11 +113,16 @@ session_ids: []
    - Take most recent by mtime
 3. If found in legacy: `cp` to `<vault>/.../plan.md`. Don't delete the original.
 
+**magnetx:**
+1. Check `<vault>/projects/magnetx/progress/<initiative>/plan.md` first. If already exists, **do not overwrite**.
+2. Otherwise, look in `~/.claude/plans/<initiative>.md` or `~/.claude/plans/magnetx-<initiative>.md`.
+3. If found: `cp` to `<vault>/.../plan.md`. Don't delete the original.
+
 ### Step 5 — Identify and capture session content
 
 - Get current session ID via `/search-history current-id` (MUST do this — Step 6 needs it).
 - Skip if already in frontmatter `session_ids`.
-- If `last_sync_timestamp` is older than other recent sessions touching this ticket, include them too.
+- If `last_sync_timestamp` is older than other recent sessions touching this ticket/initiative, include them too.
 
 Distill the session(s) into `progress.md`'s freeform section. Append, don't replace prior content. Capture:
 - Plan refinements (changes from initial `plan.md`)
@@ -102,15 +135,22 @@ Distill the session(s) into `progress.md`'s freeform section. Append, don't repl
 
 ### Step 6 — Update frontmatter
 
+**vscode/wipdp:**
 - Append the new session ID(s) to `session_ids` (this is mandatory; v0.1 had a bug here)
 - Update `last-touched: <today>`
 - Update `state` if changed (implementing → in-review → merging → merged)
 - Set `pr: <number>` if PR exists (`gh pr list --head <branch>`)
 - Set `pr_state` from `gh pr view <pr> --json state`
 
+**magnetx:**
+- Append the new session ID(s) to `session_ids`
+- Update `last-touched: <today>`
+- Update `state` if changed (scaffolded → in-progress → blocked → done)
+- No `pr` / `pr_state` fields
+
 ### Step 7 — UPLIFT to learnings.md (always — no merge gate)
 
-This is the new behavior in v0.2. Every per-ticket invocation uplifts.
+This is the new behavior in v0.2. Every per-task/initiative invocation uplifts.
 
 Walk the session content from Step 5. Categorize each potential learning:
 
@@ -121,11 +161,13 @@ Walk the session content from Step 5. Categorize each potential learning:
 - Project-overview corrections (architectural facts that pre-existed)
 - Observed runtime behavior
 
-**Tentative learnings (write to `learnings.md` with `[in-review: PR #N]` tag):**
+**Tentative learnings — vscode/wipdp only (write to `learnings.md` with `[in-review: PR #N]` tag):**
 - Decisions about how the code SHOULD work (PR may get reviewed away)
 - Architecture choices the PR introduces
 - New entities/modules the PR creates
 - Anything that depends on the PR landing as currently written
+
+**magnetx: no `[in-review]` tags.** There is no PR review gate. All learnings are settled immediately — write them directly without any tag.
 
 **Tag format example** in learnings.md:
 ```markdown
@@ -139,18 +181,24 @@ When updating `learnings.md`:
 - Update `last-revised: YYYY-MM-DD` in frontmatter
 - Cite the source PR/ticket inline where relevant
 
-### Step 8 — Detect PR merge → strip tags + archive
+### Step 8 — Detect completion → strip tags + archive
 
-After Step 7, if `gh pr view <pr> --json state` returns `MERGED`:
+**vscode/wipdp:** After Step 7, if `gh pr view <pr> --json state` returns `MERGED`:
 - Walk `learnings.md` for any `[in-review: PR #<N>]` tags matching this ticket's PR. Strip them. The learnings are now finalized.
 - If a tagged decision turned out wrong (reviewer pushed back; final code differs from what was uplifted): UPDATE the section to reflect the final state, then strip the tag.
 - Move the whole ticket directory: `mv progress/<ticket>/ progress/archive/<ticket>/`. Preserves progress.md AND plan.md AND any other artifacts.
 
-### Step 9 — Detect PR abandon/revert
+**magnetx:** No PR state to check. Archive when the user explicitly says the initiative is done:
+- No tags to strip (learnings are untagged).
+- Move the initiative directory: `mv progress/<initiative>/ progress/archive/<initiative>/`.
 
-If `pr_state == CLOSED` (not MERGED), or user passes `--abandon`:
+### Step 9 — Detect abandon/revert
+
+**vscode/wipdp:** If `pr_state == CLOSED` (not MERGED), or user passes `--abandon`:
 - Walk `learnings.md` for `[in-review: PR #<N>]` matching this ticket's PR. Either remove those entries or keep with `[abandoned: PR #N]` annotation if they're still useful as "we tried this and it didn't land".
 - Move progress to `archive/` like merge case.
+
+**magnetx:** If user passes `--abandon` or confirms the initiative was dropped: move to archive.
 
 ### Step 10 — Update sync state and report
 
@@ -168,10 +216,11 @@ If `pr_state == CLOSED` (not MERGED), or user passes `--abandon`:
 3. Scan raw sources for entries with `timestamp > last_sync_timestamp` AND `project == <this project>`:
    - `~/.claude/history.jsonl`
    - `~/.claude/sessions/*.md`
-   - `~/.claude/projects/-Users-akshat-v-eightfold-<project>/memory/*.md` (recently changed auto-memory)
+   - `~/.claude/projects/-Users-akshat-v-eightfold-<project>/memory/*.md` (eightfold projects)
+   - `~/.claude/projects/-Users-akshat-v-opensource-magnetx/memory/*.md` (magnetx)
 4. For each session/transcript:
-   - Skip if its session_id is already in some `progress/<ticket>/progress.md` `session_ids` (per-ticket flow handled it).
-   - Otherwise extract project-level signals (new conventions, runbook commands, architecture facts not tied to a single ticket).
+   - Skip if its session_id is already in some `progress/<ticket-or-initiative>/progress.md` `session_ids` (per-task flow handled it).
+   - Otherwise extract project-level signals (new conventions, runbook commands, architecture facts not tied to a single ticket/initiative).
 5. **Evolve `learnings.md`** sections in place (never duplicate).
 6. Update `last_sync_timestamp` to now.
 7. Report sections updated and sessions processed.
@@ -182,7 +231,7 @@ If `pr_state == CLOSED` (not MERGED), or user passes `--abandon`:
 - `~/opensource/vault/wiki/index.md` — manual only
 - `~/.claude/plans/`, `~/.claude/sessions/`, `~/.claude/history.jsonl`, `~/.claude/work_hq/` — RAW / deprecated operational state, read-only
 - `_archive/**` — historical
-- Any file outside `~/opensource/vault/wiki/projects/<vscode|wipdp>/`
+- Any file outside `~/opensource/vault/wiki/projects/<vscode|wipdp|magnetx>/`
 
 ## Promotion to global CLAUDE.md
 
@@ -193,13 +242,24 @@ User decides whether to promote.
 
 ## Self-test (covers v0.1 → v0.2 changes)
 
-In `cwd=~/eightfold/wipdp` on branch `akshat/ENG-XXXXX-foo`, fire `/brain-ingest ENG-XXXXX`:
+**Eightfold path** — `cwd=~/eightfold/wipdp`, branch `akshat/ENG-XXXXX-foo`, fire `/brain-ingest ENG-XXXXX`:
 1. Project = wipdp. Progress path = `wiki/projects/wipdp/progress/ENG-XXXXX/`.
-2. **If file missing: create the dir AND `progress.md` with frontmatter. This is your job.**
+2. **If file missing: create the dir AND `progress.md` with vscode/wipdp frontmatter. This is your job.**
 3. Look for plan in vault first; if absent, look in `~/.claude/plans/`. Copy if found.
 4. Get current session_id via `/search-history current-id`. Append to `session_ids` (mandatory).
 5. Distill session content as `## Session <id> (YYYY-MM-DD) — <one-liner>` block in body.
 6. **Uplift settled+tentative learnings to learnings.md regardless of PR state.** Tentative ones get `[in-review: PR #N]` tag.
 7. `gh pr view <pr> --json state` → if MERGED: strip tags from learnings.md, archive progress dir.
+8. Update `.brain-ingest-state.json`.
+9. Report.
+
+**magnetx path** — `cwd=~/opensource/magnetx`, fire `/brain-ingest build-mvp`:
+1. Project = magnetx (cwd or no `ENG-` prefix). Progress path = `wiki/projects/magnetx/progress/build-mvp/`.
+2. **If file missing: create the dir AND `progress.md` with magnetx frontmatter (no `pr`/`pr_state` fields).**
+3. Look for plan in vault first; if absent, check `~/.claude/plans/build-mvp.md` or `~/.claude/plans/magnetx-build-mvp.md`.
+4. Get current session_id. Append to `session_ids`.
+5. Distill session content as `## Session <id> (YYYY-MM-DD) — <one-liner>` block.
+6. **Uplift ALL learnings as settled (no `[in-review]` tags — there is no PR review gate for magnetx).**
+7. No PR merge check. Archive only when user explicitly says initiative is done.
 8. Update `.brain-ingest-state.json`.
 9. Report.

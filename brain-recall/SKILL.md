@@ -20,7 +20,7 @@ Stateless skills lose context across `/clear`. `/brain-recall` is the read-side 
     vscode/                                              # active v0 project (control plane)
       learnings.md                                       # the brain (project overview, runbooks, conventions, decisions, initiatives)
       progress/
-        <ticket>/                                        # per-ticket directory
+        <ticket>/                                        # per-ticket directory (ENG-XXXXX form)
           progress.md                                    # task state + in-flight learnings
           plan.md                                        # original plan from ~/.claude/plans/ (if any)
         archive/
@@ -31,40 +31,54 @@ Stateless skills lose context across `/clear`. `/brain-recall` is the read-side 
       learnings.md
       progress/<ticket>/{progress.md, plan.md}
       progress/archive/<ticket>/{progress.md, plan.md}
+    magnetx/                                             # active v0 project (indie — no Jira; uses initiative dirs)
+      learnings.md
+      notion-tasks.md                                    # Notion task board dump (sync manually; Notion is source of truth)
+      progress/<initiative>/{progress.md, plan.md}       # <initiative> = build-mvp | yt-shorts | landing | ...
+      progress/archive/<initiative>/
   _archive/                                              # pre-v0 vault — do not read
 ```
 
-Active v0 projects: **vscode** and **wipdp** ONLY. magnetx, magnetx-landing, claude-code-sessions, tweet-analysis are out of scope until v0 stabilizes.
+Active v0 projects: **vscode**, **wipdp**, and **magnetx**. (magnetx-landing, claude-code-sessions, tweet-analysis remain out of scope.)
+
+**magnetx differs from vscode/wipdp in two ways:**
+- No Jira tickets → progress dirs use initiative names (`build-mvp`, `yt-shorts`, `landing`) instead of `ENG-XXXXX`
+- No GitHub PR merge detection → task lifecycle is tracked via Notion status, not PR state
 
 ## Invocation forms
 
 | Form | Behavior |
 |---|---|
 | `/brain-recall` | Auto-resolve project from cwd. If branch matches `akshat/ENG-XXXXX-*`, also load the ticket's progress + plan. |
-| `/brain-recall ENG-XXXXX` | Explicit ticket. Resolve project by checking which project's `progress/<ticket>/` directory exists. Load learnings, progress, and plan. |
-| `/brain-recall <project>` | Load project's `learnings.md` only. Useful when reading without ticket context. |
+| `/brain-recall ENG-XXXXX` | Explicit ticket (vscode/wipdp). Resolve project by checking which project's `progress/<ticket>/` directory exists. Load learnings, progress, and plan. |
+| `/brain-recall <initiative>` | magnetx only. `<initiative>` = `build-mvp` \| `yt-shorts` \| `landing` \| etc. Load magnetx learnings + the initiative's progress/plan. |
+| `/brain-recall <project>` | Load project's `learnings.md` only. Useful when reading without ticket/initiative context. |
 | `/brain-recall <PR URL or Jira URL>` | Extract ticket → resolve project → load everything. |
+| `/brain-recall <Notion task URL>` | magnetx only. Extract initiative from Notion context → load magnetx learnings + matching progress dir if any. |
 
 ## Read order
 
 1. **Resolve `<project>`** (first hit wins):
-   - cwd → `git remote get-url origin` → repo slug (`vscode` or `wipdp`)
-   - ticket arg `ENG-\d+` → check `~/opensource/vault/wiki/projects/{vscode,wipdp}/progress/<ticket>/` and `progress/archive/<ticket>/` for existence; whichever path contains the directory determines the project (single source of truth).
-   - branch name `akshat/ENG-XXXXX-*` → same as above
-   - user-pasted artifact URL → extracted ticket → directory lookup
+   - cwd → `git remote get-url origin` → repo slug (`vscode`, `wipdp`, or `magnetx`); OR cwd path contains `/opensource/magnetx` → project = `magnetx`
+   - explicit ticket arg `ENG-\d+` → probe `~/opensource/vault/wiki/projects/{vscode,wipdp}/progress/<ticket>/` and `progress/archive/<ticket>/`; whichever path contains the directory determines the project
+   - explicit initiative arg (no `ENG-` prefix, e.g. `build-mvp`) → probe `~/opensource/vault/wiki/projects/magnetx/progress/<initiative>/`; if found → project = `magnetx`
+   - branch name `akshat/ENG-XXXXX-*` → same as ticket arg above
+   - user-pasted artifact URL (Jira/PR URL) → extracted ticket → directory lookup → vscode or wipdp
+   - user-pasted Notion task URL → project = `magnetx`
    - Fallback only if directory not found: `~/.claude/work_hq/board.json[task_id].repo` (deprecated; will be removed)
 
-   If no resolution and no explicit `<project>`, ask which project (vscode or wipdp), or load global `CLAUDE.md` only.
+   If no resolution and no explicit `<project>`, ask which project (vscode, wipdp, or magnetx), or load global `CLAUDE.md` only.
 
 2. **Read `~/opensource/vault/wiki/projects/<project>/learnings.md`** — the project brain (overview, runbooks, conventions, decisions, initiatives).
 
-3. **If a ticket is in scope, probe the ticket directory with explicit filesystem checks** (mandatory — never skip or infer absence from memory):
-   - Run: `ls ~/opensource/vault/wiki/projects/<project>/progress/<ticket>/`
-   - If that returns nothing or errors, run: `ls ~/opensource/vault/wiki/projects/<project>/progress/archive/<ticket>/`
-   - Only after BOTH commands return nothing should you conclude "no progress directory yet for <ticket>".
+3. **If a ticket/initiative is in scope, probe the directory with explicit filesystem checks** (mandatory — never skip or infer absence from memory):
+   - Run: `ls ~/opensource/vault/wiki/projects/<project>/progress/<ticket-or-initiative>/`
+   - If that returns nothing or errors, run: `ls ~/opensource/vault/wiki/projects/<project>/progress/archive/<ticket-or-initiative>/`
+   - Only after BOTH commands return nothing should you conclude "no progress directory yet".
    - Once the directory is located, read:
      - `progress.md` — active task state + in-flight learnings
-     - `plan.md` — initial plan from `/work-on-jira-task` (if exists)
+     - `plan.md` — initial plan (if exists)
+   - **magnetx only:** also check `notion-tasks.md` for current task board state (helpful context even without an explicit initiative arg).
 
 4. **Surface as prose summary in the session**:
    - One short paragraph: what this project is, what's active, what's relevant from learnings to the user's current task (if discernible).
@@ -72,6 +86,7 @@ Active v0 projects: **vscode** and **wipdp** ONLY. magnetx, magnetx-landing, cla
    - If progress file exists: surface the current state (state field), what's been done, what's next.
    - If plan file exists: highlight the plan structure (sections / step list).
    - If user gave an artifact (Jira/PR URL), fetch its content (`gh pr view`, `mcp__claude_ai_Atlassian__getJiraIssue`) and weave into the summary.
+   - If user gave a Notion URL (magnetx), fetch task status via Notion MCP and weave into the summary.
 
 5. **Never write anything.**
 
@@ -85,18 +100,20 @@ Active v0 projects: **vscode** and **wipdp** ONLY. magnetx, magnetx-landing, cla
 ## Output structure
 
 ```
-**Project:** <vscode|wipdp>
+**Project:** <vscode|wipdp|magnetx>
 **Read:**
 - `projects/<project>/learnings.md`
-- `projects/<project>/progress/<ticket>/progress.md` (or "no progress yet")
-- `projects/<project>/progress/<ticket>/plan.md` (or "no plan recorded")
+- `projects/<project>/progress/<ticket-or-initiative>/progress.md` (or "no progress yet")
+- `projects/<project>/progress/<ticket-or-initiative>/plan.md` (or "no plan recorded")
+- `projects/magnetx/notion-tasks.md` (magnetx only, if available)
 
 **Project snapshot:**
 <2-4 sentences from learnings.md — what this project is, what's most relevant>
 
-**Task context (if ticket in scope):**
+**Task context (if ticket/initiative in scope):**
 - State: <state from frontmatter>
-- Branch / PR: <values from frontmatter>
+- Branch / PR (vscode/wipdp): <values from frontmatter>
+- Notion task (magnetx): <task name + current Notion status if URL was provided>
 - Done so far: <summary from progress.md body>
 - Next: <next-action signals from progress.md>
 

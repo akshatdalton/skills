@@ -1,2 +1,6 @@
 .DS_Store
 browser-use
+
+# generated artifacts / stray junk
+yt-shorts-for-x/output/
+Archive.zip

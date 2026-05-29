@@ -1,17 +1,18 @@
 ---
 name: today
-description: Personal command center — your single source of truth for engineering work across vscode and wipdp. Polymorphic. /today renders the dashboard (priority order + Needs Your Input + Tomorrow). /today list shows a table view. /today plan enters daily-scope mode (set today/tomorrow ordered ticket lists). /today next starts the ★ task via /ship-task. /today ingest <dump> consumes meeting notes / discussion summaries into candidate tickets and decisions. Use when the user says "/today", "what should I work on", "where did I leave off", "show my board", "plan my day", "set today/tomorrow", or shares a meeting dump and wants it triaged into tasks.
+description: Personal command center — your single source of truth for engineering work across vscode and wipdp. Polymorphic. /today renders the dashboard (priority order + Needs Your Input + Backlog). /today list shows a table view. /today plan enters scope mode (set today vs backlog via the `bucket` field, or by dragging in the Obsidian Kanban board). /today next starts the ★ task via /ship-task. /today ingest <dump> consumes meeting notes / discussion summaries into candidate tickets and decisions. Use when the user says "/today", "what should I work on", "where did I leave off", "show my board", "plan my day", "set today/backlog", or shares a meeting dump and wants it triaged into tasks.
 ---
 
 # Today — Engineering Command Center (v0.2 — vault-backed)
 
 Polymorphic skill. One entry point for all daily-planning + dashboard interactions. Routes by sub-mode argument.
 
-**Source of truth (v0.2, post-migration):**
+**Source of truth (v0.3, Obsidian-Kanban-backed):**
 - **Tickets** live in `~/opensource/vault/wiki/projects/<repo>/progress/<ticket>/progress.md` frontmatter — vault is THE board.
-- **Daily ordering** (today / tomorrow) lives in `~/.claude/work_hq/today.json` — operational state owned by /today, not project knowledge.
+- **Today vs Backlog** lives in each ticket's `progress.md` frontmatter under a `bucket: today | backlog` field (default `backlog`). This replaces today.json's today_ids/tomorrow_ids.
+- **The Obsidian board** at `~/opensource/vault/Tasks.md` is a projection of the vault you can edit by dragging cards. `~/.claude/work_hq/kanban.py` syncs both ways: readback at the start of every /today, render at the end.
 - **Needs-your-input items** live in each ticket's `progress.md` frontmatter under a `needs_input:` field. No separate file.
-- `~/.claude/work_hq/board.json` is **deprecated** (Phase B migration done; vault is the single source). /today no longer reads it.
+- `~/.claude/work_hq/board.json` and `today.json` are **deprecated** — /today reads neither; `bucket` frontmatter + `Tasks.md` replace them. (Legacy skills may still write today.json; harmless.)
 
 ## Sub-modes
 
@@ -19,7 +20,7 @@ Polymorphic skill. One entry point for all daily-planning + dashboard interactio
 |---|---|---|
 | `/today` | render | Default. Show dashboard: Needs Your Input ★, Today's ordered list, Tomorrow, all P0/P1/P2. |
 | `/today list` | list | Compact table view. Columns: priority · ticket · stage · repo · PR · initiative. |
-| `/today plan` | plan | Interactive: set today_ids and tomorrow_ids ordered lists. Asks where each unplanned ticket fits. |
+| `/today plan` | plan | Interactive: set each ticket's `bucket` (today vs backlog). Asks where each unplanned ticket fits. |
 | `/today next` | next | Start the ★ task via `/ship-task`. |
 | `/today ingest <dump>` | ingest | Parse a meeting/discussion dump → propose candidate tickets (via `/create-jira-ticket-with-reference`), decisions (into vault learnings.md), and priority placements. |
 | `/today retro` | retro | Sprint wrap-up report (lazy-loaded; see `retro.md` in skill dir). |
@@ -27,6 +28,16 @@ Polymorphic skill. One entry point for all daily-planning + dashboard interactio
 ## Pre-entry: refresh state (foundation hook)
 
 On every invocation:
+
+### Step 0 — Fold in Obsidian board edits (Kanban readback)
+
+Before reading the vault, pull any card drags from the Obsidian Kanban board (`~/opensource/vault/Tasks.md`) back into vault frontmatter, so the in-memory board reflects them:
+
+```bash
+python3 ~/.claude/work_hq/kanban.py readback
+```
+
+This writes `state` / `bucket` changes into each affected `progress.md` (split-by-field rule: your drag wins for today/backlog placement, automation wins for PR-driven stage). Unknown/draft cards are left untouched. No-op if `Tasks.md` doesn't exist yet.
 
 ### Step 1 — Build the in-memory board by walking vault (frontmatter ONLY)
 
@@ -47,15 +58,15 @@ For `/today list --include-archived`, also walk `progress/archive/ENG-*/progress
 The output is a single block of `=== <path> ===` headers followed by frontmatter blocks. Parse this in-memory.
 
 For each ticket, extract:
-- `ticket`, `title`, `project` (vscode|wipdp), `branch`, `pr`, `pr_state`, `state`, `priority`, `initiative`, `created`, `last-touched`
+- `ticket`, `title`, `project` (vscode|wipdp), `branch`, `pr`, `pr_state`, `state`, `priority`, `bucket` (today|backlog; default backlog), `initiative`, `created`, `last-touched`
 - `needs_input` block if present (`{reason, action, added_at}`)
 - `session_ids` (informational; not surfaced in dashboard)
 
 This in-memory list IS the board. No `board.json` read. No per-file `Read` calls.
 
-### Step 2 — Read today.json + stale-date check
+### Step 2 — Derive Today / Backlog from bucket
 
-Read `~/.claude/work_hq/today.json` (`{date, today_ids, tomorrow_ids, notes}`). If `today.json.date < <current date>`, immediately auto-carry forward via `update.py today set --today <current today_ids> --tomorrow <current tomorrow_ids>` (this stamps the new date; the stage-transition pass in step 3 will clean up any items that have since merged). Add a `(plan carried from <old-date>)` note in the dashboard header — no user intervention needed.
+No today.json read. Each in-memory ticket already carries `bucket` (today | backlog, default backlog) from Step 1. **Today** = `bucket == today`; **Backlog** = `bucket == backlog`. bucket persists in frontmatter (set by your Obsidian drags via Step 0, or by plan mode), so there is no daily date/carry-forward to manage.
 
 ### Step 3 — Refresh PR state in parallel (gh CLI, NOT GitHub MCP)
 
@@ -76,7 +87,7 @@ GH_HOST=github.com gh api repos/EightfoldAI/<repo>/commits/<sha>/check-runs --jq
 ```
 
 Reconcile both channels — task is `ci`-failing if EITHER has a failure. Apply auto-stage-transitions:
-- merged → state `merged`, `pr_state: MERGED` (also remove from today/tomorrow)
+- merged → state `merged`, `pr_state: MERGED` (renders in the Done lane; brain-ingest archives it off the board on merge)
 - approved + both channels green + 0 unresolved → `ready-to-merge` + add `needs_input: {reason: ready-to-merge, action: "merge it"}`
 - any channel reports `failure` → `ci` + add `needs_input: {reason: ci-failing, action: "fix CI on PR #N"}`
 - else → keep `in-review`
@@ -108,6 +119,16 @@ For each ticket whose state changed in steps 3-4, **rewrite ONLY the YAML frontm
 
 User can either `claude -r <id>` to reattach or run `/ship-task <TICKET>` from the current session. Never auto-schedule /loop, CronCreate, or /pr-watcher from /today.
 
+### Step 8 — Render the Obsidian board (Kanban render)
+
+After all vault writes (steps 3–5), regenerate the board so Obsidian reflects the fresh state:
+
+```bash
+python3 ~/.claude/work_hq/kanban.py render
+```
+
+Lanes are Backlog | To Do | In Progress | In Review | Done (lane = function of `state` + `bucket`). Card order within each lane and the `%% kanban:settings %%` block are preserved across renders.
+
 ## Mode: render (default)
 
 Output format:
@@ -121,24 +142,21 @@ WORK HQ — <date>
   ENG-191692  judgment-call       → review @samyak's naming comment
   ENG-184901  group-3-design      → decide index naming convention
 
-TODAY (<n>)
+TODAY (<n>)        — bucket == today
 ─────────────────────────────────────────────────────
   1. P0  ENG-191517  in-review     vscode#105712  [agent-builder]
   2. P0  ENG-191692  todo          wipdp           [agent-builder]
   3. P1  ENG-185432  in-progress   vscode          [-]
 
-TOMORROW (<n>)
+BACKLOG (<n>)      — bucket == backlog
 ─────────────────────────────────────────────────────
-  1. P1  ENG-184567  todo          vscode          [-]
-
-OTHER ACTIVE
-─────────────────────────────────────────────────────
-  P2  ENG-186208  todo          wipdp  [rag-pipeline]
+  P0  ENG-193205  new           wipdp  [source-integration-polish]
+  P1  ENG-184567  todo          vscode [-]
 
 PICK
   [N]   start task#N             [next]   start ★
   [plan] re-plan day             [list]   table view
-  [ingest <text>] consume dump   [add ENG-N today|tomorrow]
+  [ingest <text>] consume dump   [add ENG-N today|backlog]
 ```
 
 ★ = highest-priority item with `needs_input` set in frontmatter. If none, ★ goes to the first in-progress ticket in TODAY.
@@ -156,29 +174,28 @@ ORDER  PRI  TICKET       STAGE          REPO     PR        INITIATIVE
 [T2]   P0   ENG-191692   todo           wipdp    -         agent-builder
 [T3]   P1   ENG-185432   in-progress    vscode   -         -
 ─────  ───  ───────────  ─────────────  ───────  ────────  ──────────────
-[M1]   P1   ENG-184567   todo           vscode   -         -          (tomorrow)
+[B1]   P1   ENG-184567   todo           vscode   -         -          (backlog)
 
 NEEDS YOUR INPUT
 ENG-191942  merge-conflict  → rebase PR #70 onto main (CONFLICTING)
 ```
 
-T# = today position, M# = tomorrow (manana) position. Add `--include-archived` to also walk `progress/archive/` for full history.
+T# = today position, B# = backlog position. Add `--include-archived` to also walk `progress/archive/` for full history.
 
 ## Mode: plan
 
-Interactive daily scope-setting. Steps:
+Interactive scope-setting — sets each ticket's `bucket`. (You can also just drag cards between **Backlog** and the working lanes in Obsidian; the next `/today` readback folds it in.) Steps:
 
-1. List all tasks with `state ∈ {todo, in-progress, in-review, ci, testing, ready-to-merge}` not yet placed in `today_ids` or `tomorrow_ids`.
-2. For each, ask: *"Where does ENG-XXXXX go? [today / tomorrow / skip / archive]"* — accept ordered position too: "today 2".
-3. Allow user to dump a free-form list: *"Today: ENG-191517, ENG-191692, ENG-185432. Tomorrow: ENG-184567."*
-4. Apply via `update.py today set --today ID,ID --tomorrow ID,ID`.
-5. Render the new plan.
+1. List todo-ish tickets (`state ∈ {new, planning, todo, in-progress, in-review, ci, testing, ready-to-merge}`), grouped by current `bucket`.
+2. Ask which to pull into **today** vs push to **backlog**. Accept a free-form list: *"Today: ENG-191517, ENG-191692. Backlog: ENG-184567."*
+3. Apply by editing each ticket's `bucket:` frontmatter field directly (small inline Edit — no CLI helper).
+4. Run `python3 ~/.claude/work_hq/kanban.py render`, then render the dashboard.
 
-Also clears `needs_input` blocks from progress.md frontmatter for any items the user marks resolved during planning (use a small inline edit, not update.py).
+Also clears `needs_input` blocks from progress.md frontmatter for any items the user marks resolved during planning (small inline edit).
 
 ## Mode: next
 
-1. Compute ★ (highest-priority ticket with `needs_input` block; if none, first in-progress in today_ids; if none, first todo in today_ids).
+1. Compute ★ (highest-priority ticket with `needs_input` block; if none, first in-progress with `bucket == today`; if none, first todo with `bucket == today`).
 2. Surface: *"Starting <TICKET_ID>: <title> [state=<s>]. Routing via /ship-task."*
 3. `cd` to the right repo if needed (based on the ticket's `project` frontmatter field).
 4. `git checkout` the branch if it exists (from `branch` frontmatter).
@@ -193,7 +210,7 @@ Consume meeting notes, discussion summaries, brain dumps. Steps:
    - **Decisions** ("we agreed to use Y") → append to the relevant initiative section in `~/opensource/vault/wiki/projects/<repo>/learnings.md` (find/create `## Initiative: <slug>` section). Skip if no clear initiative — surface to the user instead.
    - **Learnings** ("we discovered Z") → same destination as decisions.
 2. Show extracted items in a table; ask the user to confirm/edit each before creating tickets.
-3. After ticket creation, ask where each new one fits in today/tomorrow plan (delegates to plan mode for placement).
+3. After ticket creation, ask where each new one fits — today or backlog (delegates to plan mode for placement). New tickets default to backlog.
 
 > **Note on inbox**: the legacy `vault/wiki/inbox/` and `~/.claude/work_hq/inbox/` paths have been retired in v0. Dumps land directly into vault learnings.md initiative sections + new ticket progress files. No separate inbox queue.
 
@@ -207,7 +224,7 @@ Read `~/.claude/skills/today/retro.md` for full instructions (lazy-loaded — on
 
 | Skill | Effect on /today |
 |---|---|
-| `/create-jira-ticket-with-reference` | Creates `progress/<ticket>/progress.md` with `needs_input: {reason: new-ticket-priority, action: place in today/tomorrow plan}` so plan mode prompts placement |
+| `/create-jira-ticket-with-reference` | Creates `progress/<ticket>/progress.md` with `needs_input: {reason: new-ticket-priority, action: place in today/backlog plan}` so plan mode prompts placement |
 | `/brain-ingest <ticket>` | Updates progress.md frontmatter (state, pr, pr_state, session_ids, last-touched). On merge: archives the ticket dir → /today no longer surfaces it. |
 | `/ship-task` (loop self-terminate) | Updates progress.md frontmatter `needs_input` with stop reason; surfaces in ★ |
 | `/work-on-jira-task` (start) | sets state=in-progress (via brain-ingest at session end if user fires it) |
@@ -215,7 +232,9 @@ Read `~/.claude/skills/today/retro.md` for full instructions (lazy-loaded — on
 | `/get-pr-ready-to-merge` | updates state, pr_state (via brain-ingest at session end) |
 | Merged externally | next `/today` invocation auto-detects via gh refresh in step 3 |
 
-## Storage layout (v0.2)
+## Storage layout (v0.3)
+
+> v0.3: `bucket` frontmatter + `~/opensource/vault/Tasks.md` (Obsidian Kanban, synced by `kanban.py`) replace today.json's role. today.json + update.py are now deprecated alongside board.json — /today reads none of them. The ASCII diagram below predates this; the source-of-truth bullets at the top are authoritative.
 
 ```
 ~/opensource/vault/wiki/projects/                    ← single source of truth for tickets
@@ -239,16 +258,17 @@ Read `~/.claude/skills/today/retro.md` for full instructions (lazy-loaded — on
     └── inbox/                                        # empty / deprecated
 ```
 
-`update.py` is now scoped to today.json only. The `update.py set <id>` (board task fields) and `update.py needs-input add` commands are dead — direct progress.md frontmatter edits replace them.
+`update.py` (today.json mutator) is **deprecated** along with today.json; `bucket` frontmatter + `kanban.py` replace it. Direct progress.md frontmatter edits replace the old `update.py set`/`needs-input` commands.
 
-**update.py cheatsheet (v0.2 — today.json only)**:
+**kanban.py cheatsheet**:
 ```bash
-update.py today set --today ENG-A,ENG-B --tomorrow ENG-C   # replaces entire lists + stamps date
-update.py today add <id>                                     # append to today_ids
-update.py today remove <id>                                  # remove from today_ids or tomorrow_ids
+python3 ~/.claude/work_hq/kanban.py readback   # fold Obsidian drags -> vault frontmatter (run at /today start)
+python3 ~/.claude/work_hq/kanban.py render     # vault -> Tasks.md (run at /today end)
+python3 ~/.claude/work_hq/kanban.py sync       # readback then render
+python3 ~/.claude/work_hq/kanban.py migrate    # one-time: seed bucket:today from today.json
 ```
 
-For ticket frontmatter mutations (state, needs_input, etc.), use direct file edits on `vault/wiki/projects/<repo>/progress/<ticket>/progress.md`. No CLI helper needed — frontmatter is small enough to edit precisely.
+For ticket frontmatter mutations (state, `bucket`, needs_input, etc.), edit `vault/wiki/projects/<repo>/progress/<ticket>/progress.md` directly. `bucket: today|backlog` controls Today vs Backlog placement.
 
 ## Workflow ending
 
@@ -257,12 +277,12 @@ For ticket frontmatter mutations (state, needs_input, etc.), use direct file edi
 mode      : <render|list|plan|next|ingest>
 needs_input: <n>
 today     : <n> tasks   (or: <ticket-id> started via /ship-task)
-tomorrow  : <n> tasks
+backlog   : <n> tasks
 ────────────────────
 
 ───── artifacts ─────
 Vault     : ~/opensource/vault/wiki/projects/*/progress/*/progress.md
-Today     : ~/.claude/work_hq/today.json
+Board     : ~/opensource/vault/Tasks.md  (Obsidian Kanban)
 ─────────────────────
 ```
 
@@ -272,12 +292,12 @@ Today     : ~/.claude/work_hq/today.json
 
 ### Reads
 - `~/opensource/vault/wiki/projects/{vscode,wipdp}/progress/ENG-*/progress.md` — all active tickets (frontmatter is the board entry)
-- `~/.claude/work_hq/today.json` — today/tomorrow ordering
+- `~/opensource/vault/Tasks.md` — the Obsidian Kanban board; read back at /today start via `kanban.py` (drags fold into `bucket`/`state`)
 - (Optional, `--include-archived`): `~/opensource/vault/wiki/projects/*/progress/archive/ENG-*/progress.md`
 
 ### Writes
-- `vault/wiki/projects/<repo>/progress/<ticket>/progress.md` — **frontmatter only** (state, pr_state, last-touched, needs_input). Body is brain-ingest's responsibility.
-- `~/.claude/work_hq/today.json` — today/tomorrow ordering on `/today plan`
+- `vault/wiki/projects/<repo>/progress/<ticket>/progress.md` — **frontmatter only** (state, bucket, pr_state, last-touched, needs_input). Body is brain-ingest's responsibility.
+- `~/opensource/vault/Tasks.md` — regenerated at /today end via `kanban.py render`
 - `~/opensource/vault/wiki/projects/<repo>/learnings.md` — on `/today ingest` when initiative is known (append to "Initiative: <slug>" section as decisions/learnings)
 
 ### Local (skill-only)
@@ -287,7 +307,8 @@ Today     : ~/.claude/work_hq/today.json
 - `gh` PR data — fetched in parallel for stage transitions
 - Atlassian MCP — for stale Jira ticket refresh
 
-### Deprecated reads (do NOT use in v0.2)
+### Deprecated reads (do NOT use)
+- `~/.claude/work_hq/today.json` — replaced by `bucket` frontmatter; do not read
 - `~/.claude/work_hq/board.json` — DERIVED from vault now; do not read
 - `~/.claude/work_hq/needs_input.json` — moved into per-ticket frontmatter; do not read
 - `~/opensource/vault/wiki/hot.md` — archived; do not read or write

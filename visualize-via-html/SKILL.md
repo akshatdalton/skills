@@ -67,22 +67,52 @@ These are starting points. If a better expression exists, use it.
 - All CSS and JS inline in the file
 - **Minimal text per section** — one strong headline + one supporting line max per panel; the visual carries the meaning
 - If a section looks like a markdown bullet list, it is wrong — redo it as a visual
+- **Every major section gets a stable `id`** — `<section id="findings">`, `<div id="risk-table">`, `<svg id="flow-diagram">`. This makes the inline feedback widget (below) able to anchor comments to specific blocks and survives future edits. No `id`s = fragile `nth-child` selectors when users comment.
+- **Include the feedback widget** — see "Feedback Widget" section below; copy the `<style>` + `<button>` + `<aside>` + `<script>` block into every artifact
 
 ### 4. Output
 
-Save to: `<current-project-dir>/<slug>.html`
+**All artifacts live under a single, centralized root: `~/.claude/html-artifacts/`**
 
-If no project context: `~/opensource/vault/html-artifacts/<slug>.html`
+One folder per artifact (even for single-page ones) so the HTML, its `comments.json`, screenshots, and future versions all live together:
 
-Name after the topic, not the date:
-- `x-algorithm-field-guide.html`
-- `magnetx-scoring-explained.html`
-- `wipdp-auth-flow.html`
-
-Surface on completion:
 ```
-↳ Built: path/to/file.html — open in browser.
+~/.claude/html-artifacts/
+├── x-algorithm-field-guide/
+│   ├── index.html
+│   └── comments.json    ← created when user exports feedback
+├── magnetx-scoring-explained/
+│   └── index.html
+└── wipdp-auth-flow/
+    ├── index.html
+    └── architecture.html  ← multi-page artifacts go here too
 ```
+
+Slug rules:
+- Name after the **topic**, not the date
+- Lowercase, hyphen-separated
+- The main entry file is always `index.html`
+
+Create the folder if it doesn't exist: `mkdir -p ~/.claude/html-artifacts/<slug>/`.
+
+Surface on completion using **both** the file path and a `file://` URL so the user can click to open:
+```
+↳ Built: ~/.claude/html-artifacts/<slug>/index.html
+   file:///Users/<you>/.claude/html-artifacts/<slug>/index.html
+```
+
+### 5. Iterate (don't rebuild)
+
+When the user asks for changes to an artifact you've already built — **edit the existing file in place. Do not regenerate from scratch.**
+
+Workflow:
+1. **Read** `~/.claude/html-artifacts/<slug>/index.html` first to recover the current state
+2. **If `comments.json` exists next to it**, read that too — those are user-left inline comments waiting to be addressed. Each entry has `{ id, selector, target_text, body }`. Use the `selector` to locate exactly what they're commenting on.
+3. **Make surgical edits** with the Edit tool (not Write) — preserve the existing structure, ids, and styles
+4. **Keep all `id` attributes stable** — they're anchors users have already commented against. Renaming `#findings` to `#key-findings` orphans every comment pointing at the old id.
+5. **After processing comments.json**, mention which comment IDs you addressed and which you skipped (and why) so the user can verify
+
+Anti-pattern: regenerating the HTML "to apply the user's feedback cleanly". This destroys ids and breaks the comment trail. Edit in place.
 
 ---
 
@@ -178,6 +208,227 @@ Otherwise, stay on the Anthropic palette — it looks intentional without effort
 
 ---
 
+## Feedback Widget (paste into every artifact)
+
+HTML artifacts aren't one-and-done. Users want to highlight a chart and say "wrong number", click a section and say "expand this", or leave a free-form note — without context-switching back to chat to type out what they're referring to.
+
+The widget below is **self-contained, zero-dependency, and ~220 lines inline**. It gives every artifact:
+
+- **Floating 💬 button** bottom-right with a comment count badge — opens the sidebar
+- **Text-selection comments (Notion-style)** — highlight any text → small 💬 icon appears next to the selection → click the icon → popup with textarea → save. The icon dismisses when you click elsewhere, so selecting text never blocks the page.
+- **Element comments** — Alt-click any section with an `id` → popup opens directly (the gesture is explicit, no intermediate icon needed) → save
+- **Sidebar panel** listing all comments with delete + clear
+- **Export JSON** — downloads `comments.json` (drop next to `index.html`, then ask Claude to address them)
+- **Copy as prompt** — copies a Claude-ready prompt to the clipboard with all comments
+- **localStorage persistence** — keyed by `location.pathname`, survives reload
+
+### Why ids matter for this to work
+
+The widget records a CSS selector for each comment. If you give every major section a stable `id`, comments anchor cleanly (`#findings`, `#timeline`). Without ids, it falls back to brittle `section:nth-of-type(3) > div.card` paths that break the moment you edit the structure.
+
+### Paste this into every artifact (before `</body>`)
+
+```html
+<!-- ===== Feedback widget (self-contained, no deps) ===== -->
+<style>
+  #vh-fb-toggle{position:fixed;bottom:20px;right:20px;z-index:10000;width:44px;height:44px;border-radius:50%;background:var(--clay,#D97757);color:#fff;border:none;cursor:pointer;font-size:20px;box-shadow:0 4px 12px rgba(0,0,0,.15);display:flex;align-items:center;justify-content:center}
+  #vh-fb-toggle .count{position:absolute;top:-4px;right:-4px;background:var(--slate,#141413);color:#fff;border-radius:10px;padding:2px 6px;font-size:11px;font-weight:600;min-width:18px;display:none}
+  #vh-fb-toggle .count.show{display:block}
+  #vh-fb-panel{position:fixed;top:0;right:0;bottom:0;width:360px;background:#fff;box-shadow:-4px 0 20px rgba(0,0,0,.1);transform:translateX(100%);transition:transform .25s ease;z-index:9999;display:flex;flex-direction:column;font-family:var(--sans,system-ui,sans-serif)}
+  #vh-fb-panel.open{transform:translateX(0)}
+  #vh-fb-panel header{padding:16px 20px;border-bottom:1px solid #e5e5e5;display:flex;justify-content:space-between;align-items:center}
+  #vh-fb-panel header h3{margin:0;font-size:12px;font-weight:600;letter-spacing:.08em;text-transform:uppercase;color:#666}
+  #vh-fb-panel header button{background:none;border:none;cursor:pointer;font-size:20px;color:#999;line-height:1}
+  #vh-fb-list{flex:1;overflow-y:auto;padding:12px 20px}
+  .vh-fb-item{border-left:3px solid var(--clay,#D97757);padding:8px 12px;margin-bottom:10px;background:#f9f9f7;border-radius:0 4px 4px 0;font-size:13px}
+  .vh-fb-item .target{color:#888;font-size:11px;margin-bottom:4px;font-family:var(--mono,monospace);word-break:break-all}
+  .vh-fb-item .body{color:#333;line-height:1.4}
+  .vh-fb-item .del{float:right;background:none;border:none;cursor:pointer;color:#c33;font-size:14px;padding:0 4px}
+  #vh-fb-actions{padding:12px 20px;border-top:1px solid #e5e5e5;display:flex;gap:6px;flex-wrap:wrap}
+  #vh-fb-actions button{flex:1;min-width:80px;padding:8px 10px;border-radius:6px;border:1px solid #ddd;background:#fff;cursor:pointer;font-size:12px;font-weight:500}
+  #vh-fb-actions button:hover{background:#f5f5f5}
+  #vh-fb-popup{position:absolute;z-index:10001;background:var(--slate,#141413);color:#fff;border-radius:6px;padding:8px;box-shadow:0 4px 16px rgba(0,0,0,.2);display:none;min-width:260px}
+  #vh-fb-popup.show{display:block}
+  #vh-fb-popup .ctx{font-size:11px;color:#aaa;margin-bottom:6px;font-family:var(--mono,monospace);max-height:40px;overflow:hidden}
+  #vh-fb-popup textarea{width:100%;min-height:60px;border-radius:4px;border:none;padding:6px 8px;font-family:inherit;font-size:13px;resize:vertical;box-sizing:border-box}
+  #vh-fb-popup .actions{display:flex;gap:6px;margin-top:6px;justify-content:flex-end}
+  #vh-fb-popup button{background:var(--clay,#D97757);color:#fff;border:none;border-radius:4px;padding:4px 10px;cursor:pointer;font-size:12px}
+  #vh-fb-popup button.cancel{background:transparent;color:#aaa}
+  .vh-fb-highlight{background:rgba(217,119,87,.18)!important;transition:background .3s}
+  #vh-fb-toast{position:fixed;bottom:80px;right:20px;background:var(--slate,#141413);color:#fff;padding:10px 16px;border-radius:6px;font-size:13px;font-family:var(--sans,system-ui,sans-serif);box-shadow:0 4px 12px rgba(0,0,0,.2);opacity:0;transform:translateY(8px);transition:all .2s;z-index:10002;pointer-events:none}
+  #vh-fb-toast.show{opacity:1;transform:translateY(0)}
+  #vh-fb-selicon{position:absolute;z-index:10001;background:var(--slate,#141413);color:#fff;border:none;border-radius:6px;width:30px;height:30px;cursor:pointer;font-size:14px;display:none;align-items:center;justify-content:center;box-shadow:0 2px 10px rgba(0,0,0,.25);transition:transform .12s}
+  #vh-fb-selicon:hover{transform:scale(1.1);background:var(--clay,#D97757)}
+  #vh-fb-selicon.show{display:flex}
+</style>
+<button id="vh-fb-toggle" title="Comments (Alt-click any section to comment)">💬<span class="count"></span></button>
+<aside id="vh-fb-panel">
+  <header><h3>Comments</h3><button onclick="vhFb.toggle()">×</button></header>
+  <div id="vh-fb-list"></div>
+  <div id="vh-fb-actions">
+    <button onclick="vhFb.copyPrompt()">Copy prompt</button>
+    <button onclick="vhFb.exportJson()">Export JSON</button>
+    <button onclick="vhFb.clear()">Clear</button>
+  </div>
+</aside>
+<button id="vh-fb-selicon" title="Comment on selection">💬</button>
+<div id="vh-fb-popup">
+  <div class="ctx" id="vh-fb-ctx"></div>
+  <textarea id="vh-fb-input" placeholder="Add a comment… (Cmd/Ctrl+Enter to save)"></textarea>
+  <div class="actions">
+    <button class="cancel" onclick="vhFb.cancelPopup()">Cancel</button>
+    <button onclick="vhFb.savePopup()">Save</button>
+  </div>
+</div>
+<div id="vh-fb-toast"></div>
+<script>
+(function(){
+  const KEY='vh-fb-'+location.pathname;
+  let comments=JSON.parse(localStorage.getItem(KEY)||'[]');
+  let pending=null;
+  const $=s=>document.querySelector(s);
+  function save(){localStorage.setItem(KEY,JSON.stringify(comments));render();}
+  function selectorFor(el){
+    if(!el||el.nodeType!==1)return '';
+    if(el.id)return '#'+el.id;
+    const path=[];
+    while(el&&el.nodeType===1&&el!==document.body){
+      let p=el.tagName.toLowerCase();
+      if(el.id){path.unshift('#'+el.id);break;}
+      const sibs=Array.from(el.parentNode.children).filter(c=>c.tagName===el.tagName);
+      if(sibs.length>1)p+=':nth-of-type('+(sibs.indexOf(el)+1)+')';
+      path.unshift(p);
+      el=el.parentNode;
+    }
+    return path.join(' > ');
+  }
+  function render(){
+    const list=$('#vh-fb-list');
+    if(comments.length===0){
+      list.innerHTML='<p style="color:#999;font-size:13px;text-align:center;padding:20px;line-height:1.5">No comments yet.<br>Select text or Alt-click a section.</p>';
+    }else{
+      list.innerHTML=comments.map((c,i)=>{
+        const ctx=c.target_text?'"'+c.target_text.slice(0,60).replace(/</g,'&lt;')+(c.target_text.length>60?'…':'')+'"':c.selector;
+        return '<div class="vh-fb-item"><button class="del" onclick="vhFb.del('+i+')">×</button><div class="target">'+ctx+'</div><div class="body">'+c.body.replace(/</g,'&lt;')+'</div></div>';
+      }).join('');
+    }
+    const c=$('#vh-fb-toggle .count');
+    c.textContent=comments.length;
+    c.classList.toggle('show',comments.length>0);
+  }
+  function showPopup(x,y,target){
+    pending=target;
+    const popup=$('#vh-fb-popup');
+    $('#vh-fb-ctx').textContent=target.target_text?'"'+target.target_text.slice(0,80)+(target.target_text.length>80?'…':'')+'"':target.selector;
+    popup.style.left=Math.min(x,window.innerWidth-280)+'px';
+    popup.style.top=(y+window.scrollY+8)+'px';
+    popup.classList.add('show');
+    setTimeout(()=>$('#vh-fb-input').focus(),50);
+  }
+  function cleanText(t){return (t||'').replace(/\s+/g,' ').trim();}
+  function slugFromUrl(){
+    const parts=location.pathname.split('/').filter(p=>p&&p!=='index.html');
+    return parts.pop()||document.title||location.pathname;
+  }
+  function toast(msg){
+    const t=$('#vh-fb-toast');
+    t.textContent=msg;t.classList.add('show');
+    clearTimeout(t._timer);
+    t._timer=setTimeout(()=>t.classList.remove('show'),1800);
+  }
+  function showSelIcon(x,y){
+    const icon=$('#vh-fb-selicon');
+    icon.style.left=Math.min(x+6,window.innerWidth-50)+'px';
+    icon.style.top=(y+window.scrollY+4)+'px';
+    icon.classList.add('show');
+  }
+  function hideSelIcon(){$('#vh-fb-selicon').classList.remove('show');}
+  let pendingSel=null;
+  document.addEventListener('mouseup',e=>{
+    if(e.target.closest('#vh-fb-popup,#vh-fb-panel,#vh-fb-toggle,#vh-fb-selicon'))return;
+    // tiny delay so selection state is settled
+    setTimeout(()=>{
+      const sel=window.getSelection();
+      const text=cleanText(sel.toString());
+      if(!text){hideSelIcon();pendingSel=null;return;}
+      const range=sel.getRangeAt(0);
+      const rect=range.getBoundingClientRect();
+      const p=range.commonAncestorContainer;
+      const parent=p.nodeType===1?p:p.parentNode;
+      pendingSel={type:'selection',selector:selectorFor(parent),target_text:text};
+      showSelIcon(rect.right,rect.bottom);
+    },1);
+  });
+  document.addEventListener('mousedown',e=>{
+    if(!e.target.closest('#vh-fb-selicon,#vh-fb-popup'))hideSelIcon();
+  });
+  document.addEventListener('click',e=>{
+    if(!e.altKey)return;
+    if(e.target.closest('#vh-fb-popup,#vh-fb-panel,#vh-fb-toggle,#vh-fb-selicon'))return;
+    e.preventDefault();
+    const el=e.target.closest('[id],section,.card,.box')||e.target;
+    const rect=el.getBoundingClientRect();
+    showPopup(rect.left,rect.top,{type:'element',selector:selectorFor(el),target_text:cleanText(el.textContent).slice(0,100)});
+  });
+  document.addEventListener('keydown',e=>{
+    if(e.key==='Escape')vhFb.cancelPopup();
+    if((e.metaKey||e.ctrlKey)&&e.key==='Enter'&&pending)vhFb.savePopup();
+  });
+  window.vhFb={
+    toggle(){$('#vh-fb-panel').classList.toggle('open');},
+    savePopup(){
+      const body=$('#vh-fb-input').value.trim();
+      if(!body||!pending)return this.cancelPopup();
+      comments.push({id:'c-'+Date.now().toString(36),...pending,body,timestamp:new Date().toISOString()});
+      save();this.cancelPopup();
+    },
+    cancelPopup(){
+      $('#vh-fb-popup').classList.remove('show');
+      $('#vh-fb-input').value='';pending=null;
+    },
+    del(i){comments.splice(i,1);save();},
+    clear(){if(comments.length&&!confirm('Clear all comments?'))return;comments=[];save();},
+    exportJson(){
+      if(!comments.length)return toast('No comments to export.');
+      const blob=new Blob([JSON.stringify(comments,null,2)],{type:'application/json'});
+      const a=document.createElement('a');
+      a.href=URL.createObjectURL(blob);
+      a.download='comments.json';a.click();
+      toast('Exported comments.json');
+    },
+    copyPrompt(){
+      if(!comments.length)return toast('No comments to copy.');
+      const slug=slugFromUrl();
+      const lines=comments.map((c,i)=>(i+1)+'. ['+c.selector+'] '+(c.target_text?'"'+c.target_text.slice(0,80)+'"':'')+'\n   → '+c.body).join('\n\n');
+      const prompt='Update the HTML artifact "'+slug+'" (path: '+location.pathname+') to address these inline comments. Edit in place — do not regenerate. Keep all existing ids stable.\n\n'+lines;
+      navigator.clipboard.writeText(prompt).then(()=>toast('Copied prompt to clipboard'));
+    },
+  };
+  $('#vh-fb-toggle').addEventListener('click',()=>vhFb.toggle());
+  $('#vh-fb-selicon').addEventListener('click',e=>{
+    e.stopPropagation();
+    if(!pendingSel)return;
+    const rect=$('#vh-fb-selicon').getBoundingClientRect();
+    hideSelIcon();
+    showPopup(rect.left,rect.bottom,pendingSel);
+  });
+  render();
+})();
+</script>
+```
+
+### How a feedback round trip works
+
+1. You build the artifact → ships with widget baked in
+2. User opens it, highlights a chart number → leaves comment "where does this come from?"
+3. User clicks **Export JSON** → `comments.json` lands in Downloads → they move it next to `index.html`
+4. User asks Claude: *"address the comments on the x-algorithm artifact"*
+5. Claude reads `~/.claude/html-artifacts/x-algorithm/comments.json`, locates each `selector` in the HTML, edits in place
+
+Faster path: user clicks **Copy prompt** → pastes into Claude directly. No file handling.
+
+---
+
 ## Thariq's 20 Examples — Reference & Inspiration
 
 Full set: **[thariqs.github.io/html-effectiveness](https://thariqs.github.io/html-effectiveness)**
@@ -243,3 +494,8 @@ When explaining code or architecture:
 | Asking for approval before building | Build first, show it, iterate after |
 | Bullet-point-heavy sections | If it looks like markdown, it is wrong — redo as visual |
 | One massive scroll with no navigation | Add in-page anchors, tabs, or sections for long content |
+| Skipping `id` attributes on sections | Feedback widget falls back to `nth-child` selectors that break on edit |
+| Regenerating artifact instead of editing | Destroys ids → orphans every user comment. Always Edit in place. |
+| Renaming an existing `id` during iteration | Same as above — `#findings` → `#key-findings` breaks the comment trail |
+| Saving artifacts to project root or random dirs | Use `~/.claude/html-artifacts/<slug>/index.html` so `comments.json` has a home |
+| Omitting the feedback widget | Users can't leave inline notes — they have to context-switch back to chat |
