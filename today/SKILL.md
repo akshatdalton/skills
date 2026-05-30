@@ -24,6 +24,8 @@ Polymorphic skill. One entry point for all daily-planning + dashboard interactio
 | `/today next` | next | Start the ★ task via `/ship-task`. |
 | `/today ingest <dump>` | ingest | Parse a meeting/discussion dump → propose candidate tickets (via `/create-jira-ticket-with-reference`), decisions (into vault learnings.md), and priority placements. |
 | `/today retro` | retro | Sprint wrap-up report (lazy-loaded; see `retro.md` in skill dir). |
+| `/today meetings` | meetings | List auto-recorded meeting transcripts awaiting a summary. |
+| `/today meeting <slug\|latest>` | meeting | Summarize a recorded meeting → write `summary.md` + surface TL;DR / action items / decisions; offer to ingest items. |
 
 ## Pre-entry: refresh state (foundation hook)
 
@@ -153,10 +155,15 @@ BACKLOG (<n>)      — bucket == backlog
   P0  ENG-193205  new           wipdp  [source-integration-polish]
   P1  ENG-184567  todo          vscode [-]
 
+MEETINGS — needs summary (<n>)    — auto-recorder; omit this block if none pending
+─────────────────────────────────────────────────────
+  2026-06-01-tm-india-retro     30m   [meet 2026-06-01-tm-india-retro]
+
 PICK
   [N]   start task#N             [next]   start ★
   [plan] re-plan day             [list]   table view
   [ingest <text>] consume dump   [add ENG-N today|backlog]
+  [meet <slug>] summarize meeting
 ```
 
 ★ = highest-priority item with `needs_input` set in frontmatter. If none, ★ goes to the first in-progress ticket in TODAY.
@@ -217,6 +224,41 @@ Consume meeting notes, discussion summaries, brain dumps. Steps:
 ## Mode: retro
 
 Read `~/.claude/skills/today/retro.md` for full instructions (lazy-loaded — only when `/today retro` is invoked).
+
+## Meeting transcripts (auto-recorder integration)
+
+The headless `meetily-rec` recorder (calendar-armed via launchd; see
+`~/opensource/meetily/frontend/src-tauri/headless/README.md`) drops one transcript per meeting at
+`~/opensource/vault/raw/meetings/<date>-<slug>/transcript.md` (+ `metadata.json`). /today is where you
+turn those raw transcripts into summaries + action items on demand — the recorder captures &
+transcribes locally; Claude does the thinking.
+
+**Scan (cheap — run during render, after Step 8):** a transcript with no `summary.md` is pending:
+```bash
+for d in ~/opensource/vault/raw/meetings/*/; do
+  [ -f "$d/transcript.md" ] && [ ! -f "$d/summary.md" ] && echo "PENDING $(basename "$d")"
+done
+```
+Show pending ones in the render's **MEETINGS** block (duration from `metadata.json`) and add
+`[meet <slug>]` to PICK. If none pending, omit the block entirely.
+
+### Mode: meetings
+List `raw/meetings/*/` (newest first): summary status (✓ summarized / ○ pending), date, duration, and
+the `[meet <slug>]` action. Read-only.
+
+### Mode: meeting <slug | latest>
+1. Resolve `latest` = newest `raw/meetings/*/` dir. Read its `transcript.md` + `metadata.json`.
+2. **Summarize** — don't paraphrase; extract:
+   - **TL;DR** (2–3 sentences)
+   - **Key points** (the discussion)
+   - **Action items** (owner + task where stated)
+   - **Decisions** ("we agreed to …")
+   Note: transcripts have no speaker labels yet — attribute only where the words make it clear.
+3. Write `raw/meetings/<slug>/summary.md` (frontmatter: `meeting`, `date`, `source: today-summary`)
+   and surface it inline. Writing `summary.md` is what clears it from the pending list.
+4. **Offer to route items** (ask first, same confirm-first rule as ingest): action items → candidate
+   tickets via `/create-jira-ticket-with-reference`; decisions/learnings → the relevant initiative's
+   `learnings.md`. This hands off to **ingest mode** with the summary as the dump.
 
 ## Reactive integration (other skills push to /today via vault writes)
 
@@ -294,11 +336,13 @@ Board     : ~/opensource/vault/Tasks.md  (Obsidian Kanban)
 - `~/opensource/vault/wiki/projects/{vscode,wipdp}/progress/ENG-*/progress.md` — all active tickets (frontmatter is the board entry)
 - `~/opensource/vault/Tasks.md` — the Obsidian Kanban board; read back at /today start via `kanban.py` (drags fold into `bucket`/`state`)
 - (Optional, `--include-archived`): `~/opensource/vault/wiki/projects/*/progress/archive/ENG-*/progress.md`
+- `~/opensource/vault/raw/meetings/*/{transcript.md, metadata.json}` — auto-recorder output; scanned (transcript without `summary.md` = pending) and read on `/today meeting <slug>`
 
 ### Writes
 - `vault/wiki/projects/<repo>/progress/<ticket>/progress.md` — **frontmatter only** (state, bucket, pr_state, last-touched, needs_input). Body is brain-ingest's responsibility.
 - `~/opensource/vault/Tasks.md` — regenerated at /today end via `kanban.py render`
 - `~/opensource/vault/wiki/projects/<repo>/learnings.md` — on `/today ingest` when initiative is known (append to "Initiative: <slug>" section as decisions/learnings)
+- `~/opensource/vault/raw/meetings/<slug>/summary.md` — on `/today meeting <slug>` (the on-demand meeting summary; its presence clears the meeting from the pending list)
 
 ### Local (skill-only)
 - render templates, color codes (skill folder, not data)

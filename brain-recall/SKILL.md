@@ -9,7 +9,9 @@ description: Use when the user fires `/brain-recall` alongside or before any sta
 
 Stateless skills lose context across `/clear`. `/brain-recall` is the read-side of Akshat's vault brain — load the relevant `learnings.md`, `progress/<ticket>/progress.md`, and `progress/<ticket>/plan.md` into the session so whatever skill fires next has full project + task context.
 
-**Never writes.** Read-only. Pair with `/brain-ingest` for the write side.
+**Never writes the brain.** Read-only with respect to the vault (`learnings.md`, `progress/`). Pair with `/brain-ingest` for the write side.
+
+> One operational exception (NOT brain content): the final **arm step** writes a tiny queue marker under `~/.claude/brain-ingest-queue/` — the same class of operational state as `work_hq`, never inside `wiki/`. This is what makes the forgotten-ingest problem self-correcting (see "Arm background ingest" below).
 
 ## Vault layout (v0.1)
 
