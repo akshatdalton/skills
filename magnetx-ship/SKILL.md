@@ -26,7 +26,7 @@ You're the founder/CEO + sole engineer + sole salesperson. This skill removes "w
 2. `cd ~/opensource/magnetx` if track is build or content.
 3. Read vault `~/opensource/vault/wiki/projects/magnetx/{overview,decisions,open-threads}.md` to ground in current state.
 4. Read `~/.claude/skills/magnetx/cache.json` for task snapshot + shared_context.
-5. **Save session ID** for reattach: run `/search-history current-id` (or read `latest sessionId` from `~/.claude/history.jsonl` for current cwd) → write to `cache.shared_context.session_id` + `active_task_id`.
+5. **Save session ID** for reattach: `python3 ~/.claude/skills/search-history/scripts/current_id.py --quiet` → write to `cache.shared_context.session_id` + `active_task_id`.
 
 ---
 
@@ -141,7 +141,7 @@ Pipeline:
 5. On user pick:
    - Append to vault `~/opensource/vault/wiki/projects/magnetx/decisions.md` using the verbatim template (see Session Protocol).
    - Append to Notion HQ Context "Settled Decisions" via `mcp__claude_ai_Notion__notion-update-page`.
-   - Append to `~/opensource/vault/wiki/log.md`.
+   - Append to `~/opensource/vault/wiki/projects/magnetx/log.md` (per-vault-v1: per-project log).
    - Continue to Step 3 → mark Notion task Done.
 6. On "park": no decisions write; append to `~/opensource/vault/wiki/projects/magnetx/open-threads.md`. Mark Notion task back to To Do (so it resurfaces).
 
@@ -155,7 +155,7 @@ Pipeline:
 4. **Halt at capture gate:** *"Research surfaced. Reply 'done' with key findings (one paragraph) and I'll capture to vault."*
 5. On "done":
    - Append findings to `~/opensource/vault/wiki/projects/magnetx/learnings.md` (create if missing).
-   - Append `~/opensource/vault/wiki/log.md` line.
+   - Append `~/opensource/vault/wiki/projects/magnetx/log.md` line (per-vault-v1: per-project log).
    - Continue to Step 3 → mark Notion task Done.
 
 ---
@@ -169,7 +169,7 @@ After every successful track completion:
 3. **Cache refresh:** background single agent → re-fetch all 3 Notion sources → rewrite `cache.json` (preserve today_ids/tomorrow_ids). Don't block the user.
 4. **Vault writebacks** per Session Protocol:
    - `wiki/hot.md` — update "Active Right Now" → "magnetx: <next task or 'no active task'>"
-   - `wiki/log.md` — append `<timestamp> magnetx/notion: completed <task-id> <title>`
+   - `wiki/projects/magnetx/log.md` — per-vault-v1 per-project log; append `<timestamp> magnetx/notion: completed <task-id> <title>`
    - For DECIDE track: `decisions.md` (already done in track step)
    - For LEARN track: `learnings.md` (already done)
 5. **Pick next task** from `cache.today_ids` (next item after completed one). If found: re-invoke `/magnetx-ship <next-id>` autonomously.
@@ -258,7 +258,7 @@ next-task   : <next id from today_ids, or "today_ids exhausted">
 ### Writes (Memory)
 - `~/.claude/skills/magnetx/cache.json` — `shared_context` updates (session_id, active_task_id, stage); cache refresh after Notion writes
 - `~/opensource/vault/wiki/hot.md` — Active Right Now line for magnetx
-- `~/opensource/vault/wiki/log.md` — append on stage transitions + completion
+- `~/opensource/vault/wiki/projects/magnetx/log.md` — per-vault-v1: per-project log; append on stage transitions + completion
 - `~/opensource/vault/wiki/projects/magnetx/{decisions,open-threads,learnings}.md` — on decide/learn track completion
 
 ### Writes (DB)

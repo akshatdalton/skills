@@ -3,16 +3,17 @@ name: today
 description: Personal command center — your single source of truth for engineering work across vscode and wipdp. Polymorphic. /today renders the dashboard (priority order + Needs Your Input + Backlog). /today list shows a table view. /today plan enters scope mode (set today vs backlog via the `bucket` field, or by dragging in the Obsidian Kanban board). /today next starts the ★ task via /ship-task. /today ingest <dump> consumes meeting notes / discussion summaries into candidate tickets and decisions. Use when the user says "/today", "what should I work on", "where did I leave off", "show my board", "plan my day", "set today/backlog", or shares a meeting dump and wants it triaged into tasks.
 ---
 
+> For all per-ticket state mutations, see [shared progress policy](/Users/akshat.v/.claude/skills/_shared/progress-policy.md).
+
 # Today — Engineering Command Center (v0.2 — vault-backed)
 
 Polymorphic skill. One entry point for all daily-planning + dashboard interactions. Routes by sub-mode argument.
 
 **Source of truth (v0.3, Obsidian-Kanban-backed):**
 - **Tickets** live in `~/opensource/vault/wiki/projects/<repo>/progress/<ticket>/progress.md` frontmatter — vault is THE board.
-- **Today vs Backlog** lives in each ticket's `progress.md` frontmatter under a `bucket: today | backlog` field (default `backlog`). This replaces today.json's today_ids/tomorrow_ids.
-- **The Obsidian board** at `~/opensource/vault/Tasks.md` is a projection of the vault you can edit by dragging cards. `~/.claude/work_hq/kanban.py` syncs both ways: readback at the start of every /today, render at the end.
+- **Today vs Backlog** lives in each ticket's `progress.md` frontmatter under a `bucket: today | backlog` field (default `backlog`). Edited via `progress_fm.py bucket set`.
+- **The Obsidian board** at `~/opensource/vault/Tasks.md` is a projection of the vault you can edit by dragging cards. `~/.claude/skills/today/scripts/kanban.py` syncs both ways: readback at the start of every /today, render at the end.
 - **Needs-your-input items** live in each ticket's `progress.md` frontmatter under a `needs_input:` field. No separate file.
-- `~/.claude/work_hq/board.json` and `today.json` are **deprecated** — /today reads neither; `bucket` frontmatter + `Tasks.md` replace them. (Legacy skills may still write today.json; harmless.)
 
 ## Sub-modes
 
@@ -24,6 +25,7 @@ Polymorphic skill. One entry point for all daily-planning + dashboard interactio
 | `/today next` | next | Start the ★ task via `/ship-task`. |
 | `/today ingest <dump>` | ingest | Parse a meeting/discussion dump → propose candidate tickets (via `/create-jira-ticket-with-reference`), decisions (into vault learnings.md), and priority placements. |
 | `/today retro` | retro | Sprint wrap-up report (lazy-loaded; see `retro.md` in skill dir). |
+| `/today oncall [page\|triage\|sheet] …` | oncall | On-call command center for the TM/Career Hub primary rotation: live PagerDuty incidents, due-date-ordered triage tickets, follow-ups, incident-diagnosis playbook (lazy-loaded; see `oncall.md`). |
 | `/today meetings` | meetings | List auto-recorded meeting transcripts awaiting a summary. |
 | `/today meeting <slug\|latest>` | meeting | Summarize a recorded meeting → write `summary.md` + surface TL;DR / action items / decisions; offer to ingest items. |
 
@@ -36,7 +38,7 @@ On every invocation:
 Before reading the vault, pull any card drags from the Obsidian Kanban board (`~/opensource/vault/Tasks.md`) back into vault frontmatter, so the in-memory board reflects them:
 
 ```bash
-python3 ~/.claude/work_hq/kanban.py readback
+python3 ~/.claude/skills/today/scripts/kanban.py readback
 ```
 
 This writes `state` / `bucket` changes into each affected `progress.md` (split-by-field rule: your drag wins for today/backlog placement, automation wins for PR-driven stage). Unknown/draft cards are left untouched. No-op if `Tasks.md` doesn't exist yet.
@@ -115,7 +117,7 @@ For each ticket whose state changed in steps 3-4, **rewrite ONLY the YAML frontm
 
 ### Step 7 — Watcher-status check (per task with PR + CI failing)
 
-`/loop` and `/pr-watcher` die when the user closes Claude Code, so a "watcher running" status is only meaningful in a live session. For each task where CI is failing, check `shared_context.watcher_session_id` (set by `/ship-task` on entry — currently still in board.json's transitional shared_context; will move to progress.md frontmatter when /ship-task migrates):
+`/loop` and `/pr-watcher` die when the user closes Claude Code, so a "watcher running" status is only meaningful in a live session. For each task where CI is failing, check `watcher_session_id` in progress.md frontmatter (set by `/ship-task` on entry):
 - If absent → render `→ no watcher session recorded`
 - If present → render `→ resume with: claude -r <watcher_session_id>` (this session has the implementation context — reattaching is faster than starting fresh)
 
@@ -126,10 +128,113 @@ User can either `claude -r <id>` to reattach or run `/ship-task <TICKET>` from t
 After all vault writes (steps 3–5), regenerate the board so Obsidian reflects the fresh state:
 
 ```bash
-python3 ~/.claude/work_hq/kanban.py render
+python3 ~/.claude/skills/today/scripts/kanban.py render
 ```
 
 Lanes are Backlog | To Do | In Progress | In Review | Done (lane = function of `state` + `bucket`). Card order within each lane and the `%% kanban:settings %%` block are preserved across renders.
+
+### Step 9 — BRIEFING gather + stitch (new in v0.4)
+
+The ★ BRIEFING block above the existing dashboard is what makes /today an HQ instead of just an engineering board. Six parallel source agents fan out, each returns a structured JSON envelope, brain-recall correlates each item to active vault state, and the result renders above NEEDS YOUR INPUT.
+
+**Dispatch — single-message parallel via `superpowers:dispatching-parallel-agents`:**
+
+Invoke six general-purpose subagents in ONE response (six tool calls in one message — true parallel). Each subagent's prompt is the corresponding spec file's content, with the cursor JSON's `last_run_ts` and current `now` substituted in.
+
+| Subagent | Spec file | Cursor file |
+|---|---|---|
+| 1 | `~/.claude/skills/today/sources/gcal.md` | `~/.claude/skills/today/state/sources/gcal.json` |
+| 2 | `~/.claude/skills/today/sources/meetily.md` | `~/.claude/skills/today/state/sources/meetily.json` |
+| 3 | `~/.claude/skills/today/sources/gmail.md` | `~/.claude/skills/today/state/sources/gmail.json` |
+| 4 | `~/.claude/skills/today/sources/slack.md` | `~/.claude/skills/today/state/sources/slack.json` |
+| 5 | `~/.claude/skills/today/sources/github-review.md` | `~/.claude/skills/today/state/sources/github-review.json` |
+| 6 | `~/.claude/skills/today/sources/jira-new.md` | `~/.claude/skills/today/state/sources/jira-new.json` |
+
+Each subagent returns a JSON envelope per the contract in its spec file:
+
+```json
+{
+  "source": "<name>",
+  "fetched_at": "<ISO8601>",
+  "cursor_advance": "<ISO8601>",
+  "items": [
+    {"source_id":"...","ts":"...","title":"...","action":"...","project_hint":"vscode|wipdp|null","urgency":"now|today|fyi"}
+  ],
+  "fyi_count": <int>,
+  "errors": []
+}
+```
+
+**Latency budget for the whole step: under 30s.** Surface a timing footer in the BRIEFING during v0.4 stabilization; remove once stable.
+
+**Stitch step — correlate to active tickets/initiatives:**
+
+For each item across all six sources, when `project_hint` is set OR the title contains an `ENG-\d+` pattern, run a quick correlation:
+- Match against active progress.md frontmatter (use `~/.claude/scripts/progress_fm.py list`)
+- If the item references a known ticket, attach `correlated_ticket: ENG-XXXXX` and surface inline as `(→ ENG-XXXXX)` in the render
+- If the item references a known initiative (via project's initiative dir), attach `correlated_initiative: <slug>` and surface as `(→ initiative: <slug>)`
+
+This is what makes the BRIEFING feel connected to the rest of the board instead of being a separate inbox.
+
+**Cursor advance — only after successful render:**
+
+After Step 10 (BRIEFING render) completes successfully, write each subagent's `cursor_advance` value back to its cursor file:
+
+```python
+import json, pathlib
+for r in results:  # list of subagent JSON envelopes
+    if r.get("errors"):
+        continue  # don't advance cursor on error
+    cf = pathlib.Path.home() / ".claude/skills/today/state/sources" / f"{r['source']}.json"
+    cur = json.loads(cf.read_text())
+    cur["last_run_ts"] = r["cursor_advance"]
+    cur["fetched_count"] = len(r["items"])
+    cf.write_text(json.dumps(cur, indent=2))
+```
+
+If /today crashes mid-render, cursors stay at their previous value — the next run re-shows the items.
+
+### Step 10 — Render the ★ BRIEFING block
+
+Render the BRIEFING above the existing dashboard. Block layout (omit any sub-block where `items[]` is empty and `fyi_count == 0`; otherwise collapse to a single line like `(no new since HH:MM)`):
+
+```
+★ BRIEFING (<n total action items across sources>)
+─────────────────────────────────────────────────────
+  📅 MEETINGS TODAY (<n>)             [from gcal]
+    09:30  Sprint review · @prabh + @samyak           [join (meetily armed)]
+    14:00  1:1 with @manager                          [join]
+
+  🎙  MEETILY — PROPOSED (<n>)         [from meetily; need user confirm]
+    [2026-05-30-design-review]
+      → propose ticket: "Add OWASP scan to wipdp CI"
+      → save decision: "Q3 focus = source-integration-polish" (→ initiative: rag-for-tm)
+
+  💬 SLACK — action (<n>, since <last_run_ts>)        [from slack]
+    #eng-vscode   @prabh: "review the diff before EOD?"  (→ ENG-191517)
+    #wipdp-pod    @samyak: "RAG eval still failing — owner?"
+
+  📧 GMAIL — action (<n of M unread since <ts>)       [from gmail]
+    @legal-team: Re: data retention v3 — needs sign-off
+    (<noise_count> noise filtered)
+
+  🔍 GITHUB REVIEW QUEUE (<n>)         [from github-review]
+    vscode#105800  @prabh    agent-builder: add streaming         3d old
+    wipdp#4521     @samyak   rag-eval-pipeline: fix flaky test    1d old
+
+  📋 JIRA — new assignments (<n> since <ts>)          [from jira-new]
+    ENG-194001  P1  vscode  todo  (assigned by @lead)
+```
+
+The existing dashboard renders BELOW the BRIEFING, unchanged. PICK block adds `[confirm meetily]` when proposed items are pending.
+
+### Step 11 — Tooling rule reminder
+
+Source agents use the tools listed in their spec. The /today main thread:
+- gh CLI for the dashboard's existing PR refresh (Step 3) — unchanged
+- Atlassian MCP for the dashboard's existing Jira refresh (Step 4) — unchanged
+- progress_fm.py for any frontmatter writes — see [shared progress policy](/Users/akshat.v/.claude/skills/_shared/progress-policy.md)
+- NEVER `slack_send_*` / `slack_schedule_*` anywhere in this skill tree — per `[[feedback-slack-send-requires-caps-yes]]`
 
 ## Mode: render (default)
 
@@ -196,7 +301,7 @@ Interactive scope-setting — sets each ticket's `bucket`. (You can also just dr
 1. List todo-ish tickets (`state ∈ {new, planning, todo, in-progress, in-review, ci, testing, ready-to-merge}`), grouped by current `bucket`.
 2. Ask which to pull into **today** vs push to **backlog**. Accept a free-form list: *"Today: ENG-191517, ENG-191692. Backlog: ENG-184567."*
 3. Apply by editing each ticket's `bucket:` frontmatter field directly (small inline Edit — no CLI helper).
-4. Run `python3 ~/.claude/work_hq/kanban.py render`, then render the dashboard.
+4. Run `python3 ~/.claude/skills/today/scripts/kanban.py render`, then render the dashboard.
 
 Also clears `needs_input` blocks from progress.md frontmatter for any items the user marks resolved during planning (small inline edit).
 
@@ -224,6 +329,10 @@ Consume meeting notes, discussion summaries, brain dumps. Steps:
 ## Mode: retro
 
 Read `~/.claude/skills/today/retro.md` for full instructions (lazy-loaded — only when `/today retro` is invoked).
+
+## Mode: oncall
+
+Read `~/.claude/skills/today/oncall.md` for full instructions (lazy-loaded — only when `/today oncall …` is invoked). Drives the TM/Career Hub primary on-call rotation: live PagerDuty incidents (service `P0IHZZS`, schedule `PBWVBGY`), due-date-ordered triage tickets, daily follow-ups, the incident-diagnosis DB playbook, and the per-sprint tracking sheet. Sub-args: `page <id>` (run diagnosis, never auto-ack), `triage <TICKET>` (route to `/ship-task` with `TM on call` label), `sheet` (log statuses). When `aws` is unauthed, surface the AWS console link instead of failing.
 
 ## Meeting transcripts (auto-recorder integration)
 
@@ -274,9 +383,7 @@ the `[meet <slug>]` action. Read-only.
 | `/get-pr-ready-to-merge` | updates state, pr_state (via brain-ingest at session end) |
 | Merged externally | next `/today` invocation auto-detects via gh refresh in step 3 |
 
-## Storage layout (v0.3)
-
-> v0.3: `bucket` frontmatter + `~/opensource/vault/Tasks.md` (Obsidian Kanban, synced by `kanban.py`) replace today.json's role. today.json + update.py are now deprecated alongside board.json — /today reads none of them. The ASCII diagram below predates this; the source-of-truth bullets at the top are authoritative.
+## Storage layout (v0.4 — work_hq retired)
 
 ```
 ~/opensource/vault/wiki/projects/                    ← single source of truth for tickets
@@ -288,29 +395,19 @@ the `[meet <slug>]` action. Read-only.
 │       └── ENG-YYYYY/{progress.md, plan.md}
 └── wipdp/progress/                                   (same shape)
 
-~/.claude/work_hq/                                    ← operational state owned by /today (NOT vault)
-├── today.json                                        # {date, today_ids[], tomorrow_ids[], notes}
-├── update.py                                         # CLI helper for today.json mutations only
-├── fetch_ci_log.sh                                   # utility (CI log access)
-└── (deprecated, kept for back-compat reading until skills fully migrate:)
-    ├── board.json                                    # NO LONGER MAINTAINED — derived from vault
-    ├── needs_input.json                              # NO LONGER MAINTAINED — moved to progress.md frontmatter
-    ├── board.md                                      # rendered board (stale)
-    ├── initiatives/                                  # absorbed into vault learnings.md initiative sections
-    └── inbox/                                        # empty / deprecated
+~/.claude/scripts/progress_fm.py                      ← CLI helper for progress.md frontmatter + section mutations
+~/.claude/skills/today/scripts/kanban.py              ← Obsidian Kanban sync (readback / render)
+~/.claude/skills/get-pr-ready-to-merge/scripts/fetch_ci_log.sh  ← CI log fetcher (used by /get-pr-ready-to-merge)
 ```
 
-`update.py` (today.json mutator) is **deprecated** along with today.json; `bucket` frontmatter + `kanban.py` replace it. Direct progress.md frontmatter edits replace the old `update.py set`/`needs-input` commands.
+For ticket frontmatter mutations (state, `bucket`, needs_input, etc.), use `progress_fm.py set <TICKET> --field …` / `progress_fm.py bucket set <TICKET> --to today` / `progress_fm.py needs-input add|clear`. `bucket: today|backlog` controls Today vs Backlog placement.
 
 **kanban.py cheatsheet**:
 ```bash
-python3 ~/.claude/work_hq/kanban.py readback   # fold Obsidian drags -> vault frontmatter (run at /today start)
-python3 ~/.claude/work_hq/kanban.py render     # vault -> Tasks.md (run at /today end)
-python3 ~/.claude/work_hq/kanban.py sync       # readback then render
-python3 ~/.claude/work_hq/kanban.py migrate    # one-time: seed bucket:today from today.json
+python3 ~/.claude/skills/today/scripts/kanban.py readback   # fold Obsidian drags -> vault frontmatter (run at /today start)
+python3 ~/.claude/skills/today/scripts/kanban.py render     # vault -> Tasks.md (run at /today end)
+python3 ~/.claude/skills/today/scripts/kanban.py sync       # readback then render
 ```
-
-For ticket frontmatter mutations (state, `bucket`, needs_input, etc.), edit `vault/wiki/projects/<repo>/progress/<ticket>/progress.md` directly. `bucket: today|backlog` controls Today vs Backlog placement.
 
 ## Workflow ending
 
@@ -333,28 +430,31 @@ Board     : ~/opensource/vault/Tasks.md  (Obsidian Kanban)
 ## Data Contract
 
 ### Reads
-- `~/opensource/vault/wiki/projects/{vscode,wipdp}/progress/ENG-*/progress.md` — all active tickets (frontmatter is the board entry)
+- `~/opensource/vault/wiki/projects/{vscode,wipdp}/progress/ENG-*/progress.md` — all active tickets (frontmatter is the board entry); read via `~/.claude/scripts/progress_fm.py list` or inline awk
 - `~/opensource/vault/Tasks.md` — the Obsidian Kanban board; read back at /today start via `kanban.py` (drags fold into `bucket`/`state`)
 - (Optional, `--include-archived`): `~/opensource/vault/wiki/projects/*/progress/archive/ENG-*/progress.md`
-- `~/opensource/vault/raw/meetings/*/{transcript.md, metadata.json}` — auto-recorder output; scanned (transcript without `summary.md` = pending) and read on `/today meeting <slug>`
+- `~/opensource/vault/raw/meetings/*/{transcript.md, metadata.json, summary.md}` — meetily-rec output + auto-summaries (transcript without `summary.md` = pending for the meetily source agent)
+- `~/.claude/skills/today/state/sources/<source>.json` — six per-source cursor files for the BRIEFING block (Step 9)
+- `~/.claude/skills/today/sources/<source>.md` — six source-agent spec files (passed as subagent prompts in Step 9)
 
 ### Writes
-- `vault/wiki/projects/<repo>/progress/<ticket>/progress.md` — **frontmatter only** (state, bucket, pr_state, last-touched, needs_input). Body is brain-ingest's responsibility.
+- `vault/wiki/projects/<repo>/progress/<ticket>/progress.md` — frontmatter via `~/.claude/scripts/progress_fm.py` (see [shared progress policy](/Users/akshat.v/.claude/skills/_shared/progress-policy.md)); body is brain-ingest's responsibility
 - `~/opensource/vault/Tasks.md` — regenerated at /today end via `kanban.py render`
 - `~/opensource/vault/wiki/projects/<repo>/learnings.md` — on `/today ingest` when initiative is known (append to "Initiative: <slug>" section as decisions/learnings)
-- `~/opensource/vault/raw/meetings/<slug>/summary.md` — on `/today meeting <slug>` (the on-demand meeting summary; its presence clears the meeting from the pending list)
+- `~/opensource/vault/raw/meetings/<slug>/summary.md` — auto-written by the meetily source agent in Step 9 OR on `/today meeting <slug>` (the on-demand path; presence clears it from pending)
+- `~/.claude/skills/today/state/sources/<source>.json` — cursor advance written after successful BRIEFING render (Step 9)
 
 ### Local (skill-only)
+- `~/.claude/skills/today/scripts/kanban.py` + `.kanban_state.json` — Obsidian sync (moved from `~/.claude/work_hq/` in v0.4)
 - render templates, color codes (skill folder, not data)
 
 ### Live external (not stored)
 - `gh` PR data — fetched in parallel for stage transitions
 - Atlassian MCP — for stale Jira ticket refresh
+- Source agents (Step 9) fetch live data per their specs; the main thread never persists message bodies, just the cursor + BRIEFING render
 
 ### Deprecated reads (do NOT use)
-- `~/.claude/work_hq/today.json` — replaced by `bucket` frontmatter; do not read
-- `~/.claude/work_hq/board.json` — DERIVED from vault now; do not read
-- `~/.claude/work_hq/needs_input.json` — moved into per-ticket frontmatter; do not read
+- `~/.claude/work_hq/**` — DELETED in v0.4. Per-ticket state is in vault progress.md (read via progress_fm.py); operational state for /today is under `state/sources/`.
 - `~/opensource/vault/wiki/hot.md` — archived; do not read or write
 - `~/opensource/vault/wiki/log.md` — archived; do not write
 - `~/opensource/vault/wiki/projects/<repo>/initiatives/<slug>/{decisions,learnings}.md` — absorbed into `learnings.md` "## Initiative: <slug>" sections; the legacy paths are in `_archive/`

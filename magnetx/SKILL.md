@@ -222,7 +222,7 @@ Pattern: skills push state; `/magnetx` reads state.
 
 ## Watcher-status handoff
 
-`/magnetx-ship` saves `cache.shared_context.session_id` on entry (via `/search-history current-id`). On `/magnetx` render, for any In-Progress task with a recorded session:
+`/magnetx-ship` saves `cache.shared_context.session_id` on entry (via `current_id.py --quiet`). On `/magnetx` render, for any In-Progress task with a recorded session:
 
 ```
 T-104  in-progress  build

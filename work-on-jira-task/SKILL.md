@@ -3,6 +3,8 @@ name: work-on-jira-task
 description: Structured workflow for working on Jira tasks — fetches ticket details, creates feature branch, discovers context, collaboratively plans the implementation, then implements after approval. Use when the user provides a Jira ticket URL (e.g., https://eightfoldai.atlassian.net/browse/ENG-12345), says "let's work on ENG-XXXXX", "pick up this ticket", or pastes any eightfoldai.atlassian.net URL.
 ---
 
+> For all per-ticket state mutations, see [shared progress policy](/Users/akshat.v/.claude/skills/_shared/progress-policy.md).
+
 # Work on Jira Task
 
 Understand → plan → implement. Order matters.
@@ -29,23 +31,19 @@ At task entry, surface a 3-line context summary built from vault DB reads, BEFOR
 
 This is a READ phase — do not block, do not ask questions. Just surface and proceed.
 
-## Step 0.5 — Lazy-load work_hq (auto)
+## Step 0.5 — Lazy-load ticket state (auto)
 
 Run in this order, all auto, no prompts:
 
 1. **Identification priority** — resolve TICKET_ID by precedence:
    - User-provided artifact in current prompt (Jira URL or GitHub PR URL) → HIGHEST priority
    - Fallback: current git branch name (regex `ENG-\d+`)
-2. **work_hq lookup** — `python3 ~/.claude/work_hq/update.py get <TICKET_ID>`. If exists, load its `initiative_slug`, `shared_context`, `stage`. Surface:
+2. **progress.md lookup** — `python3 ~/.claude/scripts/progress_fm.py get <TICKET_ID>`. If exists, load its `initiative`, frontmatter, `state`. Surface:
    ```
-   ↳ initiative=<slug> · ticket=<TICKET_ID> · branch=<name> · stage=<s>
+   ↳ initiative=<slug> · ticket=<TICKET_ID> · branch=<name> · state=<s>
    ```
-3. **Initiative load** — if `initiative_slug` is set, read `~/opensource/vault/wiki/projects/<repo>/initiatives/<slug>/{charter,decisions,learnings,e2e-flow}.md` for the cross-repo evolving picture. (`<repo>` = the task's `repo` field from board.json. Initiative knowledge moved from work_hq → vault on 2026-05-03.)
-4. **Cross-repo sibling check** — scan initiative's `ticket-graph.md` (still in `~/.claude/work_hq/initiatives/<slug>/ticket-graph.md` — operational, did not move to vault). If sibling tickets have open PRs in a DIFFERENT repo than `pwd`, surface ONCE:
-   ```
-   ↳ sibling work in flight: <repo>:<branch> → PR #<n>. Initiative context loaded.
-   ```
-5. **No initiative_slug yet** → suggest from existing `~/.claude/work_hq/initiatives/` slugs (substring match against ticket title/description) OR offer to create new slug. If still no match, **ASK the user to seed an initiative slug** (or accept "no initiative" if this ticket is standalone).
+3. **Initiative load** — if `initiative` is set, read `~/opensource/vault/wiki/projects/<repo>/learnings.md` `## Initiative: <slug>` section for the cross-repo evolving picture.
+4. **No initiative yet** → suggest from existing initiative sections in `~/opensource/vault/wiki/projects/<repo>/learnings.md` (substring match against ticket title/description) OR offer to create new slug. If still no match, **ASK the user to seed an initiative slug** (or accept "no initiative" if this ticket is standalone).
 
 ### Ask-to-seed rule (applies throughout this skill)
 
@@ -70,37 +68,19 @@ Stacked: `git checkout -b akshat/ENG-[NUMBER]-[short-name] [parent-branch]`
 
 Create only. No push yet.
 
-**Register in work_hq + vault** (Memory writes at task-start lifecycle event):
+**Register in progress.md + vault** (writes at task-start lifecycle event):
 
 ```bash
 REPO=$(git remote get-url origin | sed -E 's#.*/([^/.]+)(\.git)?$#\1#')   # "vscode" or "wipdp"
-python3 ~/.claude/work_hq/update.py upsert <TICKET_ID> \
-  --title "<jira summary>" --priority <P0|P1|P2 from Jira> --stage in-progress \
-  --repo "$REPO" --branch "$(git branch --show-current)" \
-  --jira "https://eightfoldai.atlassian.net/browse/<TICKET_ID>"
+python3 ~/.claude/scripts/progress_fm.py set <TICKET_ID> \
+  --field title="<jira summary>" --field priority=<P0|P1|P2 from Jira> --field state=implementing \
+  --field project="$REPO" --field branch="$(git branch --show-current)"
 # If initiative is known/agreed:
-python3 ~/.claude/work_hq/update.py set <TICKET_ID> --field initiative_slug=<slug>
+python3 ~/.claude/scripts/progress_fm.py set <TICKET_ID> --field initiative=<slug>
 
 # Vault writes — immediate, do not defer to /today refresh:
 echo "$(date -u +%FT%TZ) work-on-jira-task: started <TICKET_ID> on $REPO branch $(git branch --show-current)" >> \
-  ~/opensource/vault/wiki/log.md
-# hot.md "Active Right Now" — replace the line for this <repo> via a small Python edit:
-python3 - <<EOF
-import re, os, datetime as dt
-p = os.path.expanduser("~/opensource/vault/wiki/hot.md")
-txt = open(p).read()
-new = "- **$REPO**: <TICKET_ID> — $(git branch --show-current) — in-progress"
-# Replace the line starting with "- **$REPO**:" under "## Active Right Now"
-txt = re.sub(r"(## Active Right Now\s*(?:\n.*)*?)\n- \*\*$REPO\*\*:[^\n]*", r"\1\n" + new, txt, count=1)
-open(p, "w").write(txt)
-EOF
-```
-
-Adds the ticket to the initiative's `ticket-graph.md` (operational, stays in work_hq):
-
-```bash
-echo "- $(date -u +%F): ENG-${TICKET_NUM} ($REPO) — <title>" >> \
-  ~/.claude/work_hq/initiatives/<slug>/ticket-graph.md
+  ~/opensource/vault/wiki/projects/$REPO/log.md     # per-vault-v1: per-project log.md
 ```
 
 ## Step 3 — Discover context
@@ -134,15 +114,15 @@ Delegate planning to superpowers — battle-tested for spec→plan handoff:
 3. **Scope gate** — same as before: state IN scope vs deferred for "API not ready" / "wiring handled by team" / "match pattern X". Confirm before approval.
 4. *"Does this approach make sense? Anything to adjust?"* — do not implement until explicit approval.
 
-Persist plan reference + decisions into work_hq:
+Persist plan reference + decisions into progress.md:
 
 ```bash
-python3 ~/.claude/work_hq/update.py append-context <TICKET_ID> --doc "plans/<TICKET_ID>.md"
+python3 ~/.claude/scripts/progress_fm.py append-section <TICKET_ID> --section "Key references" --line "plans/<TICKET_ID>.md"
 # For each material decision from brainstorming:
-python3 ~/.claude/work_hq/update.py append-context <TICKET_ID> --decision "<one line>"
-# Mirror to initiative decisions if cross-cutting (vault path; <repo> from board task):
+python3 ~/.claude/scripts/progress_fm.py append-section <TICKET_ID> --section "Decisions" --line "<one line>"
+# Mirror to initiative decisions in vault learnings.md if cross-cutting:
 echo "- $(date -u +%F) [<TICKET_ID>]: <decision>" >> \
-  ~/opensource/vault/wiki/projects/<repo>/initiatives/<slug>/decisions.md
+  ~/opensource/vault/wiki/projects/<repo>/learnings.md
 ```
 
 Legacy: the older `~/.claude/plans/tickets/<TICKET_ID>.md` path mentioned in Step 3.5 still gets read for back-compat, but new plans go to `<repo>/plans/<TICKET_ID>.md`.
@@ -158,11 +138,11 @@ For code conventions (method ordering, imports, testing, docs): read [references
 
 Grep codebase before inventing. Match existing patterns.
 
-**Record files of interest into work_hq** — every materially-edited file enters the cross-branch shared_context:
+**Record files of interest into progress.md** — every materially-edited file enters the ticket's `## Files of interest` section:
 
 ```bash
 for f in <modified-files>; do
-  python3 ~/.claude/work_hq/update.py append-context <TICKET_ID> --file "$f"
+  python3 ~/.claude/scripts/progress_fm.py append-section <TICKET_ID> --section "Files of interest" --line "$f"
 done
 ```
 
@@ -200,10 +180,10 @@ Fixes IMPL-XXXXXX."
 git push -u origin <branch>
 ```
 
-**Advance work_hq stage:**
+**Advance ticket state:**
 
 ```bash
-python3 ~/.claude/work_hq/update.py set <TICKET_ID> --field stage=in-review
+python3 ~/.claude/scripts/progress_fm.py set <TICKET_ID> --field state=in-review
 ```
 
 **Auto-detect repo** via `git remote get-url origin`:
@@ -216,21 +196,21 @@ After push: *"Ready? I'll run `/submit-pr`."*
 
 ## Passive context updates throughout
 
-Whenever you learn a material fact during this skill — a key file, a root cause, a design decision — write it through immediately to work_hq:
+Whenever you learn a material fact during this skill — a key file, a root cause, a design decision — write it through immediately to progress.md:
 
 ```bash
-python3 ~/.claude/work_hq/update.py append-context <TICKET_ID> --decision "<one-line>"
-python3 ~/.claude/work_hq/update.py append-context <TICKET_ID> --file "<path>"
+python3 ~/.claude/scripts/progress_fm.py append-section <TICKET_ID> --section "Decisions" --line "<one-line>"
+python3 ~/.claude/scripts/progress_fm.py append-section <TICKET_ID> --section "Files of interest" --line "<path>"
 ```
 
-For initiative-level findings (decisions or learnings that apply beyond this ticket — vault paths, `<repo>` from board task):
+For initiative-level findings (decisions or learnings that apply beyond this ticket — vault `learnings.md` `## Initiative: <slug>` section):
 
 ```bash
-echo "- $(date -u +%F) [<TICKET_ID>]: <decision>" >> ~/opensource/vault/wiki/projects/<repo>/initiatives/<slug>/decisions.md
-echo "- $(date -u +%F): <learning>" >> ~/opensource/vault/wiki/projects/<repo>/initiatives/<slug>/learnings.md
+echo "- $(date -u +%F) [<TICKET_ID>]: <decision>" >> ~/opensource/vault/wiki/projects/<repo>/learnings.md
+echo "- $(date -u +%F): <learning>" >> ~/opensource/vault/wiki/projects/<repo>/learnings.md
 ```
 
-Surface a one-liner `↳ saved to work_hq: ...`. Never ask first; never batch to the end.
+Surface a one-liner `↳ saved to progress.md: ...`. Never ask first; never batch to the end.
 
 ## Workflow ending
 
@@ -240,7 +220,7 @@ Surface a one-liner `↳ saved to work_hq: ...`. Never ask first; never batch to
 ✓ Branch    : akshat/ENG-XXXXX-short-name
 ✓ Initiative: <slug>   (if linked)
 ✓ Implemented + tests passing
-✓ work_hq   : <TICKET_ID> → in-review
+✓ state     : <TICKET_ID> → in-review
 → Next      : /submit-pr (auto-adds PR to /pr-watcher)
 ────────────────────
 
@@ -248,8 +228,7 @@ Surface a one-liner `↳ saved to work_hq: ...`. Never ask first; never batch to
 Jira       : https://eightfoldai.atlassian.net/browse/<TICKET_ID>
 Plan       : <repo>/plans/<TICKET_ID>.md
 Branch     : <repo>:akshat/ENG-XXXXX-short-name
-Initiative : ~/opensource/vault/wiki/projects/<repo>/initiatives/<slug>/   (only if linked; ticket-graph stays in ~/.claude/work_hq/initiatives/<slug>/)
-Board      : ~/.claude/work_hq/board.md  → task <TICKET_ID>
+Initiative : ~/opensource/vault/wiki/projects/<repo>/learnings.md  → ## Initiative: <slug>   (only if linked)
 ─────────────────────
 ```
 
@@ -266,20 +245,16 @@ PR watching is handled by `/submit-pr` — no separate step here.
 - `~/opensource/vault/wiki/projects/<repo>/runbooks.md` — env setup, server start, gh account switch
 - `~/opensource/vault/wiki/projects/<repo>/decisions.md` — prior decisions in this area
 - `~/opensource/vault/wiki/patterns/code-conventions.md` — coding rules
-- `~/opensource/vault/wiki/projects/<repo>/initiatives/<slug>/{charter,decisions,learnings,e2e-flow}.md` — when `initiative_slug` is on the board entry
+- `~/opensource/vault/wiki/projects/<repo>/learnings.md` `## Initiative: <slug>` — when `initiative` is on progress.md frontmatter
 
 ### Reads (Memory)
-- `~/.claude/work_hq/board.json[task_id]` — current state, branch, PR#, prior checkpoints
-- `~/.claude/work_hq/initiatives/<slug>/ticket-graph.md` — sibling tickets in flight
+- `~/opensource/vault/wiki/projects/<repo>/progress/<TICKET_ID>/progress.md` — frontmatter state, branch, PR#, body sections (via `progress_fm.py get`)
 - `~/opensource/vault/wiki/projects/<repo>/open-threads.md` — any thread tied to this ticket
-- `~/opensource/vault/wiki/hot.md` — active state confirmation
 
 ### Writes (Memory)
-- `~/.claude/work_hq/board.json` — stage=in-progress, branch, repo, initiative_slug, shared_context.{decisions[], files_of_interest[]}
-- `~/.claude/work_hq/initiatives/<slug>/ticket-graph.md` — append new ticket entry
-- `~/opensource/vault/wiki/projects/<repo>/initiatives/<slug>/{decisions,learnings}.md` — initiative-level findings (passive throughout)
-- `~/opensource/vault/wiki/hot.md` — write "Active Right Now" line directly (do not wait for `/today` refresh)
-- `~/opensource/vault/wiki/log.md` — append "started ENG-XXXXX"
+- `~/opensource/vault/wiki/projects/<repo>/progress/<TICKET_ID>/progress.md` — frontmatter (state=implementing, branch, project, initiative) via `progress_fm.py set`; body sections (Decisions, Files of interest) via `progress_fm.py append-section`
+- `~/opensource/vault/wiki/projects/<repo>/learnings.md` — initiative-level findings appended under `## Initiative: <slug>` (passive throughout)
+- `~/opensource/vault/wiki/projects/<repo>/log.md` — per-vault-v1: per-project log; append "started ENG-XXXXX" with timestamp + repo + branch
 - `~/opensource/vault/wiki/projects/<repo>/open-threads.md` — append H2 if blocker / parked-question encountered (per CLAUDE.md protocol)
 
 ### Local (skill-only)

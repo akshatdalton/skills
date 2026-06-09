@@ -1,23 +1,40 @@
 ---
 name: run-on-ec2
 description: >
-  Execute code, pytest, or IPython debugging on the remote EC2 dev instance.
-  Python packages and dependencies are only installed on EC2 — nothing runs locally.
-  Trigger when any code execution, pytest run, or debug snippet needs to be executed.
-  Also use this skill as the execution backend for /debug-api snippets.
+  DEPRECATED — use the `efx` skill instead. Execute code, pytest, or IPython on the
+  remote EC2 dev instance (vscode deps are EC2-only). Trigger for any EC2 code
+  execution, pytest, or debug snippet; also the execution backend for /debug-api.
+  efx supersedes this with deterministic exec + regional targets + async submit/poll.
 ---
 
+> # ⚠️ DEPRECATED — use `efx` instead
+> This skill is superseded by **`efx`** (`~/.claude/skills/efx/`), which does the same
+> job deterministically and also handles regional prod boxes, async submit/poll, VPN
+> auto-recovery, and the env-bootstrap gotchas this skill hand-rolls.
+>
+> **Migrate your call:**
+> | run-on-ec2 (old) | efx (new) |
+> |---|---|
+> | `ssh … "… pytest <p> -v --noconftest"` | `python3 ~/.claude/skills/efx/scripts/efx.py exec --target dev -- 'PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 pytest <p> -v --noconftest'` |
+> | ipython snippet via SSH | `… efx exec --target dev --lang py < snippet.py` |
+> | `pssh shared-eu` regional data | `… efx exec --target shared-eu-tm --lang py -- '…'` |
+> | long job over flaky VPN | `… efx submit …` then `… efx poll …` |
+>
+> Prefer `efx`. The content below remains only as reference for the underlying mechanics.
+
 **Scope:** vscode/ repo only. wipdp/ → run locally, no SSH.
+
+> For all per-ticket state mutations, see [shared progress policy](/Users/akshat.v/.claude/skills/_shared/progress-policy.md).
 
 # Run on EC2
 
 All code execution happens on EC2. Packages not installed locally.
 
-## Pre-entry: work_hq contract (mandatory — do not skip)
+## Pre-entry: progress.md contract (mandatory — do not skip)
 
-On entry, MUST invoke `python3 ~/.claude/work_hq/update.py get <TICKET_ID>` (work_hq) so the test/debug snippet you write is informed by the branch's prior findings (key files, test env, fixtures). Surface one-line `↳ loaded ...` or `↳ no context yet`.
+On entry, MUST invoke `python3 ~/.claude/scripts/progress_fm.py get <TICKET_ID>` so the test/debug snippet you write is informed by the branch's prior findings (key files, test env, fixtures). Surface one-line `↳ loaded ...` or `↳ no context yet`.
 
-After running tests or debug snippets, on any material finding (test env detail, fixture path, root cause line, sandbox URL, login), MUST invoke `python3 ~/.claude/work_hq/update.py append-context <TICKET_ID> --decision "<one-line>"` and surface `↳ saved to branch context: ...`.
+After running tests or debug snippets, on any material finding (test env detail, fixture path, root cause line, sandbox URL, login), MUST invoke `python3 ~/.claude/scripts/progress_fm.py append-section <TICKET_ID> --section "Decisions" --line "<one-line>"` and surface `↳ saved to progress.md: ...`.
 
 Never ask. Save and notify.
 
@@ -146,6 +163,22 @@ ssh -i ~/eightfold/id_rsa -o StrictHostKeyChecking=no ec2-user@172.31.27.248 \
 ```
 
 ---
+
+## Region-specific (VPC) execution — customer data lives in the customer's region
+
+Customer/prod data is **region-sharded** (e.g. `se.com` → eu-central-1; us customers → us-west-2). The dev box (172.31.27.248, us-west-2) has **no prod-DB creds** and **cannot resolve a non-us-west-2 group's shard** (`No secret or cluster URI for db_type global` → `DBConnectionErrorException`). To run code against a specific region's prod data, hop to a box **in that region** first.
+
+**Interactive hop via `pssh <regional-cluster>`** (verified 2026-06-01): from an interactive SSH session on the dev box, `pssh shared-eu-tm` lands you on an eu-central-1 prod box with the right region context + prod creds:
+```
+$ pssh shared-eu-tm
+i-0e... -> ec2-3-67-194-168.eu-central-1.compute.amazonaws.com
+...
+EF REGION IS: eu-central-1   AWS DEFAULT REGION: eu-central-1   AWS ACCOUNT ID: 948299231917
+(py3.13-virt) ec2-user@shared-eu-tm:~/vscode$ ipython   # now db_utils / get_custom_field_by_name see EU prod data
+```
+Known regional clusters: `shared-eu-tm` (eu-central-1). `pssh` is interactive-only (shell alias) — drive it in an interactive shell / iTerm, then run `ipython` there. This is the path for "who/what in customer X's data" when X is not a us-west-2 tenant.
+
+> gevent note on the EU box: harmless `_ThreadHandle._set_done() takes no keyword arguments` fork warnings may print after `monkey.patch_all()` — ignore, output still returns.
 
 ## Hopping to other instances (pssh)
 

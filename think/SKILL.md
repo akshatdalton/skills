@@ -3,6 +3,8 @@ name: think
 description: Use when there's no ticket or PR yet and the user wants to think through a problem, weigh approaches, or explore an idea. Trigger on phrases like "let's think about", "I want to think through", "let's brainstorm", "let's explore", "should we", "before we build", "no ticket yet", "I have an idea", "weigh A vs B", "what's the right approach for", "research X". Anchors to a vault initiative, captures decisions/scope/learnings passively into vault DB during dialogue, ends on a decision menu (create tickets / work existing / write hybrid plan file / defer). Use INSTEAD OF superpowers:brainstorming in Akshat's dev workflow.
 ---
 
+> For all per-ticket state mutations, see [shared progress policy](/Users/akshat.v/.claude/skills/_shared/progress-policy.md).
+
 # Think — Anchored Brainstorm
 
 Open-ended exploration that anchors to a vault initiative, captures into the brain as you go, and ends on a clear next step. Borrows discipline from `superpowers:brainstorming`; diverges on three mechanics:
@@ -19,11 +21,11 @@ Wrapper owns capture — never invoke `superpowers:brainstorming`, never write o
 
 Determine the initiative slug. Try in order, stop at first hit. Surface one line: `↳ initiative: <slug> (resolved via <step>)`.
 
-1. **Branch's existing work_hq context** — if branch has an `ENG-\d+` ticket, run `python3 ~/.claude/work_hq/update.py get <TICKET_ID>`. If it returns `initiative_slug`, use it.
-2. **Keyword match** — list `~/opensource/vault/wiki/projects/*/initiatives/*/`, match user's request against initiative directory names + first-line of `charter.md` (when present). Surface top match: `↳ matched <slug> — proceed with this? (y/n)`.
+1. **Branch's existing progress.md context** — if branch has an `ENG-\d+` ticket, run `python3 ~/.claude/scripts/progress_fm.py get <TICKET_ID> --field initiative`. If non-empty, use it.
+2. **Keyword match** — grep `~/opensource/vault/wiki/projects/*/learnings.md` for `## Initiative:` headings, match user's request against the slug + first body line of each. Surface top match: `↳ matched <slug> — proceed with this? (y/n)`.
 3. **Propose new** — derive slug from user's request topic (lowercase, dashes, max 4 words). Ask once: `↳ creating new initiative <slug> under <repo>? (y/n)`. Repo defaults to cwd resolution; ask if cwd is not a repo.
 
-Then load context: read `wiki/projects/<repo>/initiatives/<slug>/{charter,decisions,learnings,e2e-flow}.md` (skip files that don't exist). Read `~/.claude/work_hq/initiatives/<slug>/ticket-graph.md` for sibling tickets in flight.
+Then load context: read the `## Initiative: <slug>` section of `~/opensource/vault/wiki/projects/<repo>/learnings.md` (skip if missing).
 
 ---
 
@@ -47,21 +49,21 @@ The moment a discrete insight crystallizes, route by content type and surface th
 
 | Content type | Destination | Surface line |
 |---|---|---|
-| Concrete decision (chose A over B, picked approach X) | `initiatives/<slug>/decisions.md` | `↳ saved to decisions.md: <one-line>` |
-| Charter scope/constraint (out of scope, must support X, deferred) | `initiatives/<slug>/charter.md` (under `## Constraints` or `## Out of Scope`) | `↳ saved to charter.md: <one-line>` |
-| Past-tense insight from prior work ("we tried Y, didn't work because Z") | `initiatives/<slug>/learnings.md` | `↳ saved to learnings.md: <one-line>` |
+| Concrete decision (chose A over B, picked approach X) | `learnings.md` → `## Initiative: <slug>` (append a `### Decision …` bullet) | `↳ saved to learnings.md: <one-line>` |
+| Charter scope/constraint (out of scope, must support X, deferred) | `learnings.md` → `## Initiative: <slug>` (append under `### Scope` / `### Out of scope`) | `↳ saved to learnings.md: <one-line>` |
+| Past-tense insight from prior work ("we tried Y, didn't work because Z") | `learnings.md` → `## Initiative: <slug>` (append a `### Learning …` bullet) | `↳ saved to learnings.md: <one-line>` |
 
-**Format for `decisions.md` entries** (append, never overwrite):
+**Format for decision entries** (append under `## Initiative: <slug>` in learnings.md, never overwrite):
 ```markdown
-## YYYY-MM-DD — <one-line decision>
+### YYYY-MM-DD — <one-line decision>
 - Why: <rationale, one sentence>
 - Trade: <what we give up, optional>
 - Source: this /think session
 ```
 
-**Format for `charter.md` entries** — append a bullet under the appropriate H2 (`## Constraints` / `## Out of Scope`); create the H2 if missing.
+**Format for scope/constraint entries** — append a bullet under `### Scope` / `### Out of scope` inside the initiative section; create the H3 if missing.
 
-**Format for `learnings.md` entries** — append a dated bullet:
+**Format for learning entries** — append a dated bullet inside the initiative section:
 ```markdown
 - YYYY-MM-DD: <past-tense insight>. Why it matters now: <one-line>.
 ```
@@ -72,7 +74,7 @@ NEVER ask "should I save this?". Save and notify inline.
 
 After the brainstorm produces a 3rd decision in `decisions.md` for this session, BEFORE the decision menu, run a quick scan:
 
-- **Contradictions** — do any decisions in this session contradict each other or earlier `decisions.md` entries?
+- **Contradictions** — do any decisions in this session contradict each other or earlier decision entries in the initiative section?
 - **Ambiguity** — could any decision be interpreted two ways? Pick one and make explicit.
 - **Scope drift** — did decisions creep beyond the charter? Flag for user.
 
@@ -197,19 +199,16 @@ The plan filename is `<slug>.md`. If multiple plans per initiative, use `<slug>-
 ### Reads (DB)
 - `~/opensource/vault/wiki/projects/<repo>/overview.md` — project context (light)
 - `~/opensource/vault/wiki/projects/<repo>/decisions.md` — existing project-level decisions
-- `~/opensource/vault/wiki/projects/<repo>/initiatives/<slug>/{charter,decisions,learnings,e2e-flow}.md` — initiative context
+- `~/opensource/vault/wiki/projects/<repo>/learnings.md` — initiative sections (`## Initiative: <slug>`) for prior decisions / scope / learnings
 
 ### Reads (Memory)
-- `~/.claude/work_hq/board.json` — for initiative resolution from branch
-- `~/.claude/work_hq/initiatives/<slug>/ticket-graph.md` — sibling tickets in flight
+- `~/opensource/vault/wiki/projects/<repo>/progress/<TICKET_ID>/progress.md` — for initiative resolution from branch (via `progress_fm.py get --field initiative`)
 - `~/opensource/vault/wiki/projects/<repo>/open-threads.md` — parked questions in this area
 
 ### Writes (Memory + DB)
-- `~/opensource/vault/wiki/projects/<repo>/initiatives/<slug>/decisions.md` — passive capture (decisions only)
-- `~/opensource/vault/wiki/projects/<repo>/initiatives/<slug>/charter.md` — passive capture (scope / constraints / out-of-scope)
-- `~/opensource/vault/wiki/projects/<repo>/initiatives/<slug>/learnings.md` — passive capture (past-tense insights)
+- `~/opensource/vault/wiki/projects/<repo>/learnings.md` — passive capture (decisions, scope/constraints, past-tense insights) appended under `## Initiative: <slug>`
 - `~/opensource/vault/wiki/projects/<repo>/open-threads.md` — append H2 if exploration parks a question (per CLAUDE.md)
-- `~/opensource/vault/wiki/log.md` — append on session end: `<ts> think: <slug> — N decisions, M new threads, terminal=<menu choice>`
+- `~/opensource/vault/wiki/projects/<repo>/log.md` — per-vault-v1: per-project log; append on session end: `<ts> think: <slug> — N decisions, M new threads, terminal=<menu choice>`. Fall back to `~/opensource/vault/wiki/log.md` (vault-root) if the /think session is cross-project meta work with no resolved repo.
 - `~/.claude/plans/<slug>.md` — only if menu option 3 chosen; written directly by this skill using the hybrid template above (NO `/writing-plans` handoff)
 
 > DB writes from this skill are user-anchored captures during dialogue (not derived) — as durable as a manual Obsidian edit. Distinct from `/brain-ingest`'s weekly distillation.

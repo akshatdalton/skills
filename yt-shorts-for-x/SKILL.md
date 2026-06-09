@@ -1,6 +1,6 @@
 ---
 name: yt-shorts-for-x
-description: Use when the user wants short vertical X/Twitter clips from a YouTube video or local mp4. Triggers on "make X clips from this video", "extract viral shorts from this YouTube link", "turn this podcast into X-ready clips", "find best moments for posting on X", or a YouTube URL paired with intent to post on X.
+description: Use when the user wants short vertical X/Twitter clips from a YouTube video or local mp4. Triggers on "make X clips from this video", "extract viral shorts from this YouTube link", "turn this podcast into X-ready clips", "find best moments for posting on X", or a YouTube URL paired with intent to post on X. Also triggers when uploading or scheduling a finished clip on X (native video) via the Chrome browser.
 ---
 
 # yt-shorts-for-x
@@ -183,6 +183,17 @@ aksenHQ/clips/
 ## Step 10 — Reporting back
 
 Show the user a ranked table: `#  score  start→end  title  hook  gdrive_clip_url`. Include the run's gdrive folder URL at the top so they can open the whole bundle. Skip the transcript unless asked. Surface failures verbatim — never claim success for a clip whose ffmpeg or upload returned non-zero, or whose verify was REJECT.
+
+## Publishing to X (optional, interactive)
+
+Steps 01–10 stop at gdrive. To **upload + schedule** a clip on X.com via the
+Claude-in-Chrome MCP, follow **`publishing-to-x.md`** (loaded only when posting). The one
+rule: never click X's media button and never use `file_upload` (both fail in this harness) —
+instead `bash ~/.claude/skills/yt-shorts-for-x/scripts/copy_file_to_clipboard.sh <clip.mp4>`
+then Cmd-V the clip into the composer (every click/key/type is the Claude-in-Chrome MCP
+`computer` tool, not desktop computer-use). Verify the account first; captions are verbatim
+from the run's `POST_KIT.md`; gate the final Schedule/Post click on an explicit user "go"
+(irreversible public action).
 
 ## Tunable knobs
 

@@ -35,11 +35,13 @@ Then build the Option C script with those values. **Do not attempt curl-to-curl 
 
 ---
 
-## Pre-entry: work_hq contract (mandatory)
+> For all per-ticket state mutations, see [shared progress policy](/Users/akshat.v/.claude/skills/_shared/progress-policy.md).
 
-On entry, invoke `python3 ~/.claude/work_hq/update.py get <TICKET_ID>` (work_hq) first. Surface one-line `↳ loaded ...` or `↳ no context yet`.
+## Pre-entry: progress.md contract (mandatory)
 
-After any material finding (auth detail, endpoint behaviour, bug), invoke `python3 ~/.claude/work_hq/update.py append-context <TICKET_ID> --decision "<one-liner>"`.
+On entry, invoke `python3 ~/.claude/scripts/progress_fm.py get <TICKET_ID>` first. Surface one-line `↳ loaded ...` or `↳ no context yet`.
+
+After any material finding (auth detail, endpoint behaviour, bug), invoke `python3 ~/.claude/scripts/progress_fm.py append-section <TICKET_ID> --section "Decisions" --line "<one-liner>"`.
 
 ---
 
@@ -505,7 +507,7 @@ Output a table:
 
 1. PATCH all test entities back to their pre-test state (disable entities that were disabled before, delete test data if possible)
 2. Remove cookie jar: `rm -f ${COOKIEJAR}`
-3. Save findings: `python3 ~/.claude/work_hq/update.py append-context <TICKET_ID> --decision "<test summary>"`
+3. Save findings: `python3 ~/.claude/scripts/progress_fm.py append-section <TICKET_ID> --section "Decisions" --line "<test summary>"`
 
 ---
 

@@ -11,7 +11,7 @@ Load schema first: `ToolSearch select:mcp__claude_ai_Atlassian__searchJiraIssues
 
 ## Steps
 
-**1. Get sprint ID** — read `customfield_10020[].id` from any board task in `~/.claude/work_hq/board.json` where `state=active`. Never hardcode.
+**1. Get sprint ID** — read `customfield_10020[].id` from the most-recently-active ticket via `progress_fm.py list --filter state=in-review,in-progress` → then pull the Jira issue for that ticket and read `customfield_10020[].id`. Never hardcode.
 
 **2. Query Jira** — result is large, pipe through jq immediately:
 ```bash

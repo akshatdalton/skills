@@ -3,6 +3,8 @@ name: get-pr-ready-to-merge
 description: Handle everything needed to get a PR into mergeable state — resolving review comments, fixing CI failures, handling stale branches, PR description/checklist issues, and all merge blockers. Use when the user asks to get a PR ready to merge, resolve PR comments, fix CI failures, handle merge conflicts, fix checklist validation, or make a PR mergeable. Also trigger on "fix CI on PR #N", "address review comments", "PR is blocked", or any GitHub PR URL shared with an expectation of action.
 ---
 
+> For all per-ticket state mutations, see [shared progress policy](/Users/akshat.v/.claude/skills/_shared/progress-policy.md).
+
 # Get PR Ready to Merge
 
 Use GitHub MCP tools (fall back to `gh` CLI). On permission/"not found" errors: `gh auth status` → `gh auth switch` → retry.
@@ -27,8 +29,8 @@ Build in-scope file allowlist BEFORE any edit:
 1. From PR title + body, extract Jira ticket ID (`ENG-\d+`).
 2. Pull Jira ticket via `mcp__claude_ai_Atlassian__getJiraIssue` → use summary + description.
 3. `gh pr diff <pr> --name-only` → currently-changed files = baseline allowlist.
-4. `python3 ~/.claude/work_hq/update.py get <TICKET_ID>` → also include `shared_context.files_of_interest[]` (cross-branch widening).
-5. Combine into `SCOPE_ALLOWLIST` = baseline ∪ Jira-named files ∪ shared_context files.
+4. `python3 ~/.claude/scripts/progress_fm.py get <TICKET_ID>` → also include the body's `## Files of interest` section (cross-branch widening).
+5. Combine into `SCOPE_ALLOWLIST` = baseline ∪ Jira-named files ∪ Files-of-interest entries.
 
 **Hard rule:** any edit to a file outside `SCOPE_ALLOWLIST` requires explicit user confirmation:
 *"<file> is outside this PR's scope (per Jira/PR title). Confirm to edit?"* Never silently expand scope.
@@ -50,7 +52,7 @@ If `mergeable_state` ∈ {`dirty`, `behind`} or rebase has conflicts:
 - **Do NOT proceed to Step 3** until rebase clean and `mergeable_state` ≠ `dirty`/`behind`.
 
 ```bash
-python3 ~/.claude/work_hq/update.py append-context <TICKET_ID> --decision "rebased onto <base> at <sha>"
+python3 ~/.claude/scripts/progress_fm.py append-section <TICKET_ID> --section "Decisions" --line "rebased onto <base> at <sha>"
 ```
 
 ## Tooling rule (applies to all of Step 3)
@@ -94,7 +96,7 @@ Also scan comments JSON for bot messages with "CHECKLIST VALIDATION ERRORS" — 
 
 ```bash
 LOG=/tmp/ci-<job>-<sha>.log
-~/.claude/work_hq/fetch_ci_log.sh "<details_url>" > "$LOG"
+~/.claude/skills/get-pr-ready-to-merge/scripts/fetch_ci_log.sh "<details_url>" > "$LOG"
 tail -200 "$LOG"   # show only failing tail
 ```
 
@@ -270,35 +272,35 @@ Skill(skill="loop", args="30m /get-pr-ready-to-merge <PR url>")
 
 ```bash
 # On loop entry, BEFORE work:
-python3 ~/.claude/work_hq/update.py get <TICKET_ID>
-# read shared_context.ci_loop = {iteration, last_failure_sig, started_at}
+python3 ~/.claude/scripts/progress_fm.py get <TICKET_ID>
+# read ci_loop_iteration, ci_loop_last_failure_sig, ci_loop_started_at from frontmatter
 
 # After this iteration:
-python3 ~/.claude/work_hq/update.py set <TICKET_ID> \
-  --field "shared_context.ci_loop.iteration=<n>" \
-  --field "shared_context.ci_loop.last_failure_sig=<hash-of-failing-checks>"
+python3 ~/.claude/scripts/progress_fm.py set <TICKET_ID> \
+  --field "ci_loop_iteration=<n>" \
+  --field "ci_loop_last_failure_sig=<hash-of-failing-checks>"
 
 # On a successful push that fixed something — RESET:
-python3 ~/.claude/work_hq/update.py set <TICKET_ID> \
-  --field "shared_context.ci_loop.iteration=0"
+python3 ~/.claude/scripts/progress_fm.py set <TICKET_ID> \
+  --field "ci_loop_iteration=0"
 ```
 
 ### On exit, always
 
 1. Stop the loop.
-2. Update work_hq stage:
+2. Update progress.md state:
    ```bash
    # Ready-to-merge:
-   python3 ~/.claude/work_hq/update.py set <TICKET_ID> --field stage=ready-to-merge
-   python3 ~/.claude/work_hq/update.py needs-input add <TICKET_ID> \
+   python3 ~/.claude/scripts/progress_fm.py set <TICKET_ID> --field state=ready-to-merge
+   python3 ~/.claude/scripts/progress_fm.py needs-input add <TICKET_ID> \
      --reason "ready-to-merge" --action "merge the PR"
 
    # Blocked on external actor (Groups 3/5):
-   python3 ~/.claude/work_hq/update.py set <TICKET_ID> --field stage=in-review
-   python3 ~/.claude/work_hq/update.py needs-input add <TICKET_ID> \
+   python3 ~/.claude/scripts/progress_fm.py set <TICKET_ID> --field state=in-review
+   python3 ~/.claude/scripts/progress_fm.py needs-input add <TICKET_ID> \
      --reason "<group-3-design|group-5-external-actor>" --action "<one-line>"
    ```
-3. Surface a final-state line + register the item in `~/.claude/work_hq/needs_input.json` so it appears in `/today`.
+3. Surface a final-state line — the `needs_input:` block in progress.md frontmatter is what surfaces in `/today`.
 
 ### Surface once on registration
 
@@ -334,18 +336,18 @@ See [EXAMPLES.md](EXAMPLES.md) for examples.
 
 ## Passive context updates throughout
 
-Per the passive-context-updates feedback rule, invoke `python3 ~/.claude/work_hq/update.py append-context <TICKET_ID> --decision "<info>"` whenever you discover a CI cause, fix approach, or new blocker — immediately, one-liner notification, never ask. Bubble up to `project:update` if the cause/decision affects the broader initiative.
+Per the passive-context-updates feedback rule, invoke `python3 ~/.claude/scripts/progress_fm.py append-section <TICKET_ID> --section "Decisions" --line "<info>"` whenever you discover a CI cause, fix approach, or new blocker — immediately, one-liner notification, never ask. Bubble up to `project:update` if the cause/decision affects the broader initiative.
 
 ## Workflow ending
 
-Before completing, the final-state summary (blockers resolved, current PR state) is also auto-saved via `python3 ~/.claude/work_hq/update.py append-context <TICKET_ID> --decision "..."`.
+Before completing, the final-state summary (blockers resolved, current PR state) is also auto-saved via `python3 ~/.claude/scripts/progress_fm.py append-section <TICKET_ID> --section "Decisions" --line "..."`.
 
 ```
 ───── workflow ─────
 ✓ Ticket          : ENG-XXXXX
 ✓ Rebase          : clean onto <base>
 ✓ Blockers fixed  : <N> CI, <M> comments
-✓ work_hq         : <TICKET_ID> → <new stage>
+✓ state           : <TICKET_ID> → <new state>
 ✓ CI watch        : /loop 1h registered  (or: stopped, reason: <X>)
 → Status          : <ready-to-merge|blocked on <actor>|in CI loop>
 ────────────────────
@@ -355,8 +357,8 @@ Jira    : https://eightfoldai.atlassian.net/browse/<TICKET_ID>
 PR      : https://github.com/{owner}/{repo}/pull/{number}
 Branch  : <repo>:{headRefName}
 Plan    : <repo>/plans/<TICKET_ID>.md       (only if it exists)
-Board   : ~/.claude/work_hq/board.md  → task <TICKET_ID>
-Initiative: ~/opensource/vault/wiki/projects/<repo>/initiatives/<slug>/   (only if linked)
+Initiative: ~/opensource/vault/wiki/projects/<repo>/learnings.md  → ## Initiative: <slug>   (only if linked)
+Progress: ~/opensource/vault/wiki/projects/<repo>/progress/<TICKET_ID>/progress.md
 Logs    : /tmp/ci-<job>-<sha>.log            (only if CI logs were fetched)
 Loop    : /loop 30m /get-pr-ready-to-merge <pr-url>   (running | stopped: <reason>)
 ─────────────────────
@@ -374,17 +376,16 @@ Omit any line whose artifact wasn't touched in this run.
 
 In this order, on every entry (initial or loop fire):
 
-1. `python3 ~/.claude/work_hq/update.py get <TICKET_ID>` (work_hq) — LEGACY back-compat reader. Skip silently if missing.
-2. `python3 ~/.claude/work_hq/update.py get <TICKET_ID>` — **primary** source: cross-branch shared_context, scope, decisions, ci_state, review_state, ci_loop counter.
-3. If task has `initiative_slug`, also load `~/opensource/vault/wiki/projects/<repo>/initiatives/<slug>/{charter,decisions,learnings,e2e-flow}.md` (`<repo>` from board task; initiative knowledge moved from work_hq → vault on 2026-05-03; `ticket-graph.md` stays in work_hq).
+1. `python3 ~/.claude/scripts/progress_fm.py get <TICKET_ID>` — primary source: frontmatter (state, branch, pr, ci_state, review_state, ci_loop_*) + body sections (Decisions, Files of interest).
+2. If frontmatter has `initiative`, also load `~/opensource/vault/wiki/projects/<repo>/learnings.md` `## Initiative: <slug>` section.
 
-Run #2 + #3 even if PR is for a different repo than `pwd` — work_hq is project-agnostic.
+Run even if PR is for a different repo than `pwd` — progress_fm.py resolves the right project.
 
 ### Ask-to-seed rule
 
 If a required piece of context is missing (no Jira ticket linked from PR, ambiguous reviewer comment, no test files for code being changed, unknown initiative slug, etc.) — **STOP and ASK the user to seed it**. One question at a time, then proceed. Don't guess.
 
-## work_hq updates (passive, throughout)
+## progress.md updates (passive, throughout)
 
 Use SHORT repo slug everywhere:
 
@@ -392,21 +393,21 @@ Use SHORT repo slug everywhere:
 REPO=$(git remote get-url origin | sed -E 's#.*/([^/.]+)(\.git)?$#\1#')
 
 # After CI fix-loop iteration:
-python3 ~/.claude/work_hq/update.py set <TICKET_ID> \
+python3 ~/.claude/scripts/progress_fm.py set <TICKET_ID> \
   --field "ci_state=<green|failing|in_progress>"
 
 # After review comment applied/replied:
-python3 ~/.claude/work_hq/update.py set <TICKET_ID> \
+python3 ~/.claude/scripts/progress_fm.py set <TICKET_ID> \
   --field "review_state=<approved|changes_requested|commented>"
 
 # When all green + 0 unresolved + approved:
-python3 ~/.claude/work_hq/update.py set <TICKET_ID> --field stage=ready-to-merge
+python3 ~/.claude/scripts/progress_fm.py set <TICKET_ID> --field state=ready-to-merge
 
 # When merged:
-python3 ~/.claude/work_hq/update.py set <TICKET_ID> --field stage=merged
+python3 ~/.claude/scripts/progress_fm.py set <TICKET_ID> --field state=merged
 
-# For each CI cause/fix, append to learnings.md (vault path; <repo> from board task):
-echo "- $(date -u +%FT%TZ): CI fix — <one line>" >> ~/opensource/vault/wiki/projects/<repo>/initiatives/<slug>/learnings.md
+# For each CI cause/fix, append to learnings.md (vault path):
+echo "- $(date -u +%FT%TZ): CI fix — <one line>" >> ~/opensource/vault/wiki/projects/<repo>/learnings.md
 ```
 
 ## Pre-push: re-test before pushing fixes
@@ -435,16 +436,13 @@ Before pushing a code fix, in order:
 - `~/opensource/vault/wiki/projects/<repo>/initiatives/<slug>/{charter,decisions,learnings,e2e-flow}.md` — when applicable
 
 ### Reads (Memory)
-- `~/.claude/work_hq/board.json[task_id]` — current ci_state, review_state, ci_loop iteration, files_of_interest (scope allowlist seed)
-- `~/opensource/vault/wiki/hot.md` — active task confirmation
+- `~/opensource/vault/wiki/projects/<repo>/progress/<TICKET_ID>/progress.md` — current ci_state, review_state, ci_loop_iteration, Files of interest (scope allowlist seed) via `progress_fm.py get`
 - `~/opensource/vault/wiki/projects/<repo>/open-threads.md` — related threads
 
 ### Writes (Memory)
-- `~/.claude/work_hq/board.json` — ci_state, review_state, ci_loop {iteration, started_at, last_failure_sig}
-- `~/.claude/work_hq/needs_input.json` — on hard blocker (Group 3 design / Group 5 external actor) or ready-to-merge
-- `~/opensource/vault/wiki/projects/<repo>/initiatives/<slug>/learnings.md` — CI fix learnings (one line per resolved cause)
-- `~/opensource/vault/wiki/hot.md` — state transitions
-- `~/opensource/vault/wiki/log.md` — per-event ("CI fixed: ruff", "review thread resolved", "Group 3 stop on PR#XXXX")
+- `~/opensource/vault/wiki/projects/<repo>/progress/<TICKET_ID>/progress.md` — ci_state, review_state, ci_loop_iteration/started_at/last_failure_sig, needs_input block (frontmatter via `progress_fm.py set` / `needs-input add`)
+- `~/opensource/vault/wiki/projects/<repo>/learnings.md` — CI fix learnings (one line per resolved cause)
+- `~/opensource/vault/wiki/projects/<repo>/log.md` — per-vault-v1: per-project log; per-event ("CI fixed: ruff", "review thread resolved", "Group 3 stop on PR#XXXX")
 - `~/opensource/vault/wiki/projects/<repo>/open-threads.md` — when a review comment becomes a deferred thread (per CLAUDE.md protocol)
 
 ### Local (skill-only)
@@ -453,4 +451,4 @@ Before pushing a code fix, in order:
 
 ### Live external (not stored)
 - `gh` PR check-runs, status, reviews, comments, threads, file diffs
-- CI logs from S3 via `~/.claude/work_hq/fetch_ci_log.sh`
+- CI logs from S3 via `~/.claude/skills/get-pr-ready-to-merge/scripts/fetch_ci_log.sh`

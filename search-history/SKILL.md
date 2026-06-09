@@ -141,24 +141,51 @@ python3 ~/.claude/scripts/extract_transcripts.py \
 
 ## Current Session ID Mode
 
-For `/search-history current-id`.
+For `/search-history current-id` — "what is THIS session's id / transcript path?"
+
+Works for both Claude Code CLI **and** Claude Desktop "Code" sessions: both write
+transcripts to `~/.claude/projects/` and both register in `~/.claude/sessions/<pid>.json`.
+There is nothing extra to search under `~/Library/Application Support/Claude`.
+
+### The resolver
 
 ```bash
-python3 -c "
-import os
-from pathlib import Path
-project = os.getcwd()
-proj_dir = project.replace('/', '-').lstrip('-')
-p = Path.home() / '.claude' / 'projects' / proj_dir
-if p.exists():
-    files = sorted([f for f in p.glob('*.jsonl') if 'subagents' not in str(f)],
-                   key=lambda x: x.stat().st_mtime, reverse=True)
-    if files:
-        print(files[0].stem)
-"
+python3 ~/.claude/skills/search-history/scripts/current_id.py          # diagnostic: id + cwd + surface + transcript path + last user msg
+python3 ~/.claude/skills/search-history/scripts/current_id.py --quiet  # just the id              (exit 1 if unknown)
+python3 ~/.claude/skills/search-history/scripts/current_id.py --path   # just the transcript path (exit 1 if not flushed yet)
 ```
 
-Print the session ID and the project it matched. Show last user message to confirm.
+How it resolves (deterministic, no disk-flush wait):
+
+1. **`$CLAUDE_CODE_SESSION_ID`** — set in every session shell; instant and exact.
+2. **PID-walk → `~/.claude/sessions/<pid>.json`** — walks THIS process's ancestry, so
+   concurrent tabs in the same cwd never collide; also yields cwd / surface / name.
+   When both resolve, they are cross-checked (`AGREE` / `DISAGREE`).
+
+It then locates the transcript via `rglob("<sid>.jsonl")` (no path-encoding needed) and
+prints the last user message so you can confirm it's the right session.
+
+### Reuse from other skills
+
+Any skill that needs the current session id or its transcript should **call this script**
+rather than re-deriving it:
+
+- `--quiet` → the session id
+- `--path`  → the absolute transcript JSONL to read
+
+Do **not** rebuild the path by munging cwd (`replace('/','-')`) — that breaks on dotted
+usernames; let the script `rglob` the id instead.
+
+### If the script can't resolve (rare)
+
+Only when `$CLAUDE_CODE_SESSION_ID` is unset **and** no registry file matches: emit a fresh
+random marker (`uuid4().hex`) into your output, wait for the **next** turn (transcripts flush
+asynchronously — a few seconds, across a turn boundary), then grep for it — exactly one file
+matches, and its stem is the id:
+
+```bash
+grep -rl "MARKER" ~/.claude/projects/ --include="*.jsonl" | grep -v subagents
+```
 
 ---
 
@@ -167,6 +194,9 @@ Print the session ID and the project it matched. Show last user message to confi
 - Thinking block content is not stored (empty in JSONL) — not recoverable
 - Sessions auto-delete after 30 days (set `cleanupPeriodDays` in `~/.claude/settings.json` to extend)
 - `history.jsonl` — do not use, incomplete
+- Transcripts flush to disk asynchronously — a message you just sent may take a few
+  seconds (across a turn boundary) to appear in the JSONL. Grep-after-the-fact and the
+  marker method must retry; the `current-id` resolver sidesteps this entirely.
 
 ---
 

@@ -106,48 +106,41 @@ No template: header metadata → TL;DR (written last, placed first) → sections
 
 After doc assembled:
 
-1. **Initiative seeding** — agree a slug (e.g., `agent-builder`, `manager-agent-v2`) with the user. Then write into `~/.claude/work_hq/initiatives/<slug>/`:
+1. **Initiative seeding** — agree a slug (e.g., `agent-builder`, `manager-agent-v2`) with the user. Append an `## Initiative: <slug>` section to `~/opensource/vault/wiki/projects/<repo>/learnings.md` with the doc's vision, scope, and (if posted) confluence URL:
 
 ```bash
 SLUG=<slug>
-mkdir -p ~/.claude/work_hq/initiatives/$SLUG
-# Charter: top-of-doc summary + scope from this tech doc
-cat > ~/.claude/work_hq/initiatives/$SLUG/charter.md <<EOF
-# <initiative-title>
+REPO=<vscode|wipdp>
+cat >> ~/opensource/vault/wiki/projects/$REPO/learnings.md <<EOF
 
-## Vision
-<1-2 sentence summary>
+## Initiative: $SLUG
 
-## Scope
+**Vision:** <1-2 sentence summary>
+
+**Scope:**
 - <bullet>
 - <bullet>
 
-## Tech doc
-<confluence url, if posted>
+**Tech doc:** <confluence url, if posted>
+
+**Decisions / Learnings / E2E flow:** appended as dated bullets below by /think, /work-on-jira-task, /brain-ingest.
 EOF
-# Touch the other 3 files so they exist for downstream skills:
-: > ~/.claude/work_hq/initiatives/$SLUG/ticket-graph.md
-: > ~/.claude/work_hq/initiatives/$SLUG/decisions.md
-: > ~/.claude/work_hq/initiatives/$SLUG/learnings.md
-# Append e2e-flow if applicable:
-[ -n "$E2E_CONTENT" ] && echo "$E2E_CONTENT" > ~/.claude/work_hq/initiatives/$SLUG/e2e-flow.md
 ```
 
-2. Run `work_hq append-context` with doc location + key decisions (existing).
+2. Surface key decisions inline; `/think` and `/work-on-jira-task` will continue appending dated bullets to this section as the initiative evolves.
 
 3. Offer next action and surface artifacts:
 
 ```
 ───── workflow ─────
 ✓ Tech doc  : <confluence url | local path>
-✓ Initiative: <slug> seeded at ~/.claude/work_hq/initiatives/<slug>/
+✓ Initiative: <slug> seeded under ~/opensource/vault/wiki/projects/<repo>/learnings.md
 → Next      : /create-jira-ticket-with-reference  (create impl tickets)
             : /work-on-jira-task <ticket>          (start building)
 ────────────────────
 
 ───── artifacts ─────
 Tech doc   : <confluence url>
-Charter    : ~/.claude/work_hq/initiatives/<slug>/charter.md
-Initiative : ~/.claude/work_hq/initiatives/<slug>/
+Initiative : ~/opensource/vault/wiki/projects/<repo>/learnings.md  → ## Initiative: <slug>
 ─────────────────────
 ```

@@ -17,7 +17,7 @@ Decode/encode duality:
 
 Before fetching the source, try to resolve the repo from one of:
 - `cwd` → `git remote get-url origin` → repo slug
-- pasted Jira URL → board.json[task_id].repo
+- pasted Jira URL → `progress_fm.py get <TICKET_ID> --field project`
 - pasted GitHub PR URL → repo from URL path
 
 If repo resolves, read **last 30 lines** of `~/opensource/vault/wiki/projects/<repo>/decisions.md` and scan `~/opensource/vault/wiki/projects/<repo>/open-threads.md` for any reference to the artifact being explained (ticket ID, PR number, file paths from diff if available). If a relevant entry exists, surface inline at the top of the explanation:
@@ -141,9 +141,9 @@ After explanation, offer next action based on source type:
 - PR → *"/review-pr-architecture to review? /get-pr-ready-to-merge to address?"*
 - Design doc/RFC → *"/create-tech-doc to document? /work-on-jira-task to implement?"*
 
-If on a branch, run `work_hq append-context` with key findings from explanation.
+If on a branch, run `progress_fm.py append-section <TICKET_ID> --section "Decisions"` with key findings from explanation.
 
-**Vault writeback (Memory-only):** append one line to `~/opensource/vault/wiki/log.md`:
+**Vault writeback (Memory-only):** append one line to `~/opensource/vault/wiki/projects/<repo>/log.md` (per-vault-v1; `<repo>` resolved from cwd or artifact). Fall back to `~/opensource/vault/wiki/log.md` (vault-root) ONLY if no project resolves (e.g. explaining a generic library doc, not tied to vscode/wipdp/magnetx/claude-code/meetily). Format:
 ```
 <ISO-ts> explain-anything: explained <source-type> <ref> via Arc <A|B|C>
 ```
@@ -163,10 +163,10 @@ NEVER write to `decisions.md` or `learnings.md` from this skill.
 - `~/opensource/vault/wiki/projects/<repo>/code-conventions.md` — only when explaining code style/patterns
 
 ### Reads (Memory)
-- `~/.claude/work_hq/board.json[task_id]` — if branch has an ENG-* ticket, used to resolve repo
+- `~/opensource/vault/wiki/projects/<repo>/progress/<TICKET_ID>/progress.md` — if branch has an ENG-* ticket, used to resolve repo (via `progress_fm.py get --field project`)
 
 ### Writes (Memory)
-- `~/opensource/vault/wiki/log.md` — one-line append per explanation
+- `~/opensource/vault/wiki/projects/<repo>/log.md` — per-vault-v1: one-line append per explanation (per-project; vault-root log.md only as cross-project fallback)
 - `~/opensource/vault/wiki/projects/<repo>/open-threads.md` — append H2 only if unresolved question surfaces (per CLAUDE.md)
 
 ### Local (skill-only)

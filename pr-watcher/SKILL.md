@@ -235,7 +235,7 @@ Then either let `/loop` schedule the next tick (if any watches remain), or print
 - (none from the canonical Memory stores — `pr-watcher` does NOT consume work_hq board or vault hot.md; merge events flow into Memory via other skills)
 
 ### Writes (Memory)
-- `~/opensource/vault/wiki/log.md` — append on watch state transitions ("vscode#NNN: pending→passing", "wipdp#NN: merged via auto-shipit", "vscode#MMM: failing_user notify")
+- `~/opensource/vault/wiki/projects/<repo>/log.md` — per-project log (`<repo>` from the watch state's `repo` field: vscode | wipdp). Append on watch state transitions ("vscode#NNN: pending→passing", "wipdp#NN: merged via auto-shipit", "vscode#MMM: failing_user notify"). Per vault-v1: every project has its own log.md; fall back to `~/opensource/vault/wiki/log.md` (vault-root) ONLY for genuinely cross-project events (rare).
 
 ### Local (skill-only — not canonical data)
 - `~/.claude/scheduled/state/watch-state.json` — runtime state of the watch loop (which PRs, last seen state, debounce flags). Skill-private operational state; not consumed by other skills; explicitly NOT a duplicate of vault.

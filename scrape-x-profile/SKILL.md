@@ -16,6 +16,8 @@ description: >
 
 Scrape original tweets from a public X profile via the GraphQL `UserTweets` endpoint, using the logged-in Chrome session. Incremental by default.
 
+> **Designated account (Akshat):** run scrapes only on the **@akshat_25_xd** burner X session — never the primary @aksenHQ. The data is public (see Appendix B); the burner just isolates rate-limit/auth risk from the main account. If Chrome is on a different account, reconnect to the window logged into @akshat_25_xd before scraping.
+
 **Args:** `@handle [mode]`
 
 | Mode | Behavior |

@@ -3,6 +3,8 @@ name: create-jira-ticket-with-reference
 description: Create Jira tickets by inheriting metadata (priority, sprint, labels, pod) from a reference ticket. Use whenever the user provides a reference ticket ID or URL and asks to create a similar ticket — phrases like "create a ticket like ENG-12345", "same metadata as ENG-12345", "similar to ENG-12345", "copy metadata from", or "based on ENG-12345". Always use this skill when a Jira ticket ID appears alongside a creation request.
 ---
 
+> For all per-ticket state mutations, see [shared progress policy](/Users/akshat.v/.claude/skills/_shared/progress-policy.md).
+
 # Create Jira Ticket with Reference
 
 Inherit metadata from reference ticket, apply user overrides.
@@ -23,7 +25,7 @@ done
 
 Surface one-line: `↳ loaded vault context: project=<repo> initiative=<slug>` or `↳ no vault context yet`.
 
-> **Note:** the legacy `~/.claude/work_hq/initiatives/<slug>/decisions.md` ticket-graph file is no longer maintained (v0.2 — moved to vault learnings.md "## Initiative: <slug>" sections on 2026-05-13). The new ticket's relationship to its initiative is captured in the vault progress.md frontmatter `initiative:` field set in Step 7.
+> **Note:** The new ticket's relationship to its initiative is captured in the vault progress.md frontmatter `initiative:` field set in Step 7. Initiative-level decisions/learnings live in `vault/wiki/projects/<repo>/learnings.md` under `## Initiative: <slug>` sections.
 
 Never ask "shall I save?" — save and notify. User corrects next message if wrong.
 
@@ -101,7 +103,7 @@ Missing fields: `not set on reference — skipped`.
 
 ### Step 7 — Vault progress seed (PRIMARY — single source of truth for ticket state)
 
-After ticket creation, immediately seed the vault progress directory. **The vault is the primary source of truth for per-ticket state.** work_hq writes (in the workflow-ending section below) are TRANSITIONAL and will be removed once `/today` and other state-machine skills migrate to read the vault directly.
+After ticket creation, immediately seed the vault progress directory. **The vault progress.md is the single source of truth for per-ticket state.**
 
 ```bash
 mkdir -p ~/opensource/vault/wiki/projects/<repo>/progress/<NEW_TICKET_ID>/
@@ -204,37 +206,25 @@ Offer: *"Start `/work-on-jira-task` on ENG-XXXXX?"*
 
 ---
 
-## Workflow ending (vault primary, derived board refresh)
+## Workflow ending
 
-The vault progress.md (Step 7) IS the source of truth for the new ticket. After writing it, refresh the derived board.json so legacy skill consumers (work-on-jira-task, ship-task, submit-pr, get-pr-ready-to-merge, etc.) see the new ticket immediately:
+The vault progress.md (Step 7) IS the source of truth for the new ticket. No board.json refresh is required — `/today` and all state-machine skills read progress.md directly via `progress_fm.py`.
 
-```bash
-python3 ~/.claude/work_hq/update.py regenerate-from-vault
-```
-
-This walks the vault and rebuilds board.json as a derived view — fast, idempotent. Surface inline:
-
-```
-↳ board.json regenerated from vault (36 tasks)
-```
-
-Then surface the final summary:
+Surface the final summary:
 
 ```
 ───── workflow ─────
 ✓ Ticket   : <NEW_TICKET_ID> created
 ✓ Reference: <REF_TICKET_ID> (priority, sprint, labels inherited)
-✓ Vault    : projects/<repo>/progress/<NEW_TICKET_ID>/progress.md (PRIMARY — source of truth)
-✓ Board    : ~/.claude/work_hq/board.json regenerated from vault (derived view for legacy skills)
+✓ Vault    : projects/<repo>/progress/<NEW_TICKET_ID>/progress.md (source of truth)
 → Next     : /brain-recall <NEW_TICKET_ID> then /work-on-jira-task  OR  /ship-task <NEW_TICKET_ID>
 ────────────────────
 
 ───── artifacts ─────
 Jira       : https://eightfoldai.atlassian.net/browse/<NEW_TICKET_ID>
 Reference  : https://eightfoldai.atlassian.net/browse/<REF_TICKET_ID>
-Vault      : ~/opensource/vault/wiki/projects/<repo>/progress/<NEW_TICKET_ID>/progress.md
-Board      : ~/.claude/work_hq/board.json (derived; refreshed via regenerate-from-vault)
+Progress   : ~/opensource/vault/wiki/projects/<repo>/progress/<NEW_TICKET_ID>/progress.md
 ─────────────────────
 ```
 
-> **No more direct work_hq writes.** Previous TRANSITIONAL `update.py upsert/needs-input add` calls have been removed in v0.2 (2026-05-13). Vault progress.md frontmatter carries `needs_input` directly when relevant; board.json is regenerated from vault on every ticket creation.
+> Vault progress.md frontmatter carries `needs_input`, `bucket`, and all per-ticket state directly. No derived board.json to regenerate.

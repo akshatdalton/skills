@@ -7,15 +7,17 @@ description: >
   endpoint", or shares an API response with an error message.
 ---
 
+> For all per-ticket state mutations, see [shared progress policy](/Users/akshat.v/.claude/skills/_shared/progress-policy.md).
+
 # Debug API — Eightfold Backend
 
 Goal: pinpoint exact line and reason — not just reproduce.
 
-## Pre-entry: work_hq contract (mandatory — do not skip)
+## Pre-entry: progress.md contract (mandatory — do not skip)
 
-On entry, MUST invoke `python3 ~/.claude/work_hq/update.py get <TICKET_ID>` (work_hq) first — prior findings often pinpoint the area to investigate. Surface one-line `↳ loaded ...` or `↳ no context yet`.
+On entry, MUST invoke `python3 ~/.claude/scripts/progress_fm.py get <TICKET_ID>` first — prior findings often pinpoint the area to investigate. Surface one-line `↳ loaded ...` or `↳ no context yet`.
 
-The moment you locate the failing line, MUST invoke `python3 ~/.claude/work_hq/update.py append-context <TICKET_ID> --decision "root cause: <file>:<line> — <reason>"` and surface `↳ saved to branch context: ...`. Same for any tracing insight (call chain, gate behavior, env config) — save immediately, never batch to the end.
+The moment you locate the failing line, MUST invoke `python3 ~/.claude/scripts/progress_fm.py append-section <TICKET_ID> --section "Decisions" --line "root cause: <file>:<line> — <reason>"` and surface `↳ saved to progress.md: ...`. Same for any tracing insight (call chain, gate behavior, env config) — save immediately, never batch to the end.
 
 Never ask. Save and notify.
 
@@ -150,4 +152,4 @@ uv run pytest ...
 After pinpointing failure, offer next action:
 - *"/create-jira-ticket-with-reference to track bug? Or fix directly via /work-on-jira-task?"*
 
-Run `work_hq append-context` with root cause, exact file:line, and proposed fix.
+Run `progress_fm.py append-section <TICKET_ID> --section "Decisions"` with root cause, exact file:line, and proposed fix.

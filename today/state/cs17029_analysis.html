@@ -1,0 +1,421 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>CS-17029 · Telekom profile_field not updating on IJP apply</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: #0f1117; color: #e2e8f0; line-height: 1.6; padding: 24px; }
+  h1 { font-size: 1.4rem; font-weight: 700; color: #f8fafc; margin-bottom: 4px; }
+  h2 { font-size: 1.05rem; font-weight: 600; color: #94a3b8; text-transform: uppercase; letter-spacing: 0.06em; margin: 28px 0 10px; border-bottom: 1px solid #1e293b; padding-bottom: 6px; }
+  h3 { font-size: 0.95rem; font-weight: 600; color: #cbd5e1; margin: 16px 0 6px; }
+  p, li { font-size: 0.88rem; color: #94a3b8; }
+  li { margin-left: 18px; margin-bottom: 3px; }
+  .ticket-meta { display: flex; gap: 10px; flex-wrap: wrap; margin: 8px 0 20px; }
+  .badge { font-size: 0.72rem; font-weight: 600; padding: 3px 9px; border-radius: 999px; }
+  .badge-red { background: #7f1d1d; color: #fca5a5; }
+  .badge-yellow { background: #78350f; color: #fcd34d; }
+  .badge-blue { background: #1e3a5f; color: #93c5fd; }
+  .badge-green { background: #14532d; color: #86efac; }
+  .badge-purple { background: #3b0764; color: #d8b4fe; }
+  .section { background: #141823; border: 1px solid #1e293b; border-radius: 10px; padding: 18px 20px; margin-bottom: 16px; }
+  code { font-family: 'JetBrains Mono', 'Fira Code', monospace; font-size: 0.8rem; background: #1e293b; color: #7dd3fc; padding: 1px 5px; border-radius: 4px; }
+  pre { font-family: 'JetBrains Mono', 'Fira Code', monospace; font-size: 0.78rem; background: #0a0e1a; border: 1px solid #1e293b; border-radius: 8px; padding: 14px 16px; overflow-x: auto; line-height: 1.7; margin: 8px 0; }
+  .tree-line { color: #475569; }
+  .tree-file { color: #60a5fa; }
+  .tree-fn { color: #a78bfa; }
+  .tree-note { color: #64748b; font-style: italic; }
+  .tree-ok { color: #4ade80; }
+  .tree-bad { color: #f87171; }
+  .tree-gap { color: #fb923c; }
+  .diff-section { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+  @media (max-width: 768px) { .diff-section { grid-template-columns: 1fr; } }
+  .diff-box { background: #0a0e1a; border: 1px solid #1e293b; border-radius: 8px; padding: 12px 14px; }
+  .diff-title { font-size: 0.75rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 8px; }
+  .diff-ok .diff-title { color: #4ade80; }
+  .diff-bad .diff-title { color: #f87171; }
+  table { width: 100%; border-collapse: collapse; font-size: 0.83rem; margin: 8px 0; }
+  th { text-align: left; padding: 7px 10px; background: #1e293b; color: #94a3b8; font-weight: 600; font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.04em; }
+  td { padding: 7px 10px; border-bottom: 1px solid #1e293b; color: #cbd5e1; vertical-align: top; }
+  tr:last-child td { border-bottom: none; }
+  .label-v { color: #4ade80; font-size: 0.7rem; font-weight: 700; }
+  .label-o { color: #60a5fa; font-size: 0.7rem; font-weight: 700; }
+  .label-i { color: #fbbf24; font-size: 0.7rem; font-weight: 700; }
+  .fix-box { background: #0f2027; border-left: 3px solid #4ade80; border-radius: 0 8px 8px 0; padding: 12px 16px; margin: 8px 0; }
+  .warn-box { background: #1a0f00; border-left: 3px solid #f59e0b; border-radius: 0 8px 8px 0; padding: 12px 16px; margin: 8px 0; }
+  .info-box { background: #0f1827; border-left: 3px solid #3b82f6; border-radius: 0 8px 8px 0; padding: 12px 16px; margin: 8px 0; }
+  .gap-marker { background: #1a0a00; border: 1px dashed #92400e; border-radius: 6px; padding: 8px 12px; margin: 4px 0; }
+  .comment-thread { border-left: 2px solid #334155; padding-left: 12px; margin: 6px 0; }
+  .comment-author { font-size: 0.75rem; font-weight: 700; color: #7dd3fc; }
+  .comment-date { font-size: 0.7rem; color: #475569; margin-left: 6px; }
+  .comment-body { font-size: 0.82rem; color: #94a3b8; margin-top: 2px; }
+  .eta-box { background: #1a0a1a; border: 1px solid #7c3aed; border-radius: 8px; padding: 14px 18px; }
+  .eta-timeline { display: flex; flex-direction: column; gap: 8px; margin-top: 10px; }
+  .eta-row { display: flex; align-items: flex-start; gap: 10px; font-size: 0.83rem; }
+  .eta-dot { width: 8px; height: 8px; border-radius: 50%; background: #7c3aed; margin-top: 5px; flex-shrink: 0; }
+  .summary-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 10px; margin: 10px 0; }
+  .summary-card { background: #0a0e1a; border: 1px solid #1e293b; border-radius: 8px; padding: 12px 14px; }
+  .summary-label { font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.05em; color: #475569; font-weight: 600; }
+  .summary-value { font-size: 0.9rem; color: #e2e8f0; font-weight: 600; margin-top: 2px; }
+</style>
+</head>
+<body>
+
+<h1>CS-17029 — Application question answer not updating <code>profile_field</code> on IJP apply</h1>
+<div class="ticket-meta">
+  <span class="badge badge-yellow">Waiting for Eng</span>
+  <span class="badge badge-red">Due: Jun 10 ← TOMORROW</span>
+  <span class="badge badge-blue">Deutsche Telekom · Mega EMEA/APAC</span>
+  <span class="badge badge-purple">Group: telekom-growthhub.com</span>
+  <span class="badge badge-green">Assigned: Akshat</span>
+</div>
+
+<!-- SUMMARY CARDS -->
+<div class="summary-grid">
+  <div class="summary-card">
+    <div class="summary-label">Flow affected</div>
+    <div class="summary-value">IJP (Internal Job Posting)</div>
+  </div>
+  <div class="summary-card">
+    <div class="summary-label">Profile field not writing</div>
+    <div class="summary-value">custom_info.efcustom_text_talent_pipeline_osd</div>
+  </div>
+  <div class="summary-card">
+    <div class="summary-label">Question ID</div>
+    <div class="summary-value">q_poc (type: dropdown)</div>
+  </div>
+  <div class="summary-card">
+    <div class="summary-label">Stuck at value</div>
+    <div class="summary-value">"Executive-ready" → should be "T.E.O"</div>
+  </div>
+</div>
+
+<!-- WHAT IS HAPPENING — PLAIN ENGLISH -->
+<h2>What's happening (intern explanation)</h2>
+<div class="section">
+  <h3>The setup</h3>
+  <p>Deutsche Telekom added a custom dropdown question to their Career Hub application form for internal employees applying to jobs. The question (named <code>q_poc</code>, labelled "Choose any") has two options: "T.E.O" and "Lidership". The config says: <em>when an employee answers this question, write their answer into a custom field on their profile called <code>efcustom_text_talent_pipeline_osd</code></em>.</p>
+
+  <h3 style="margin-top:12px">The expectation</h3>
+  <p>Employee picks "T.E.O" → submits application → their profile field updates from "Executive-ready" to "T.E.O".</p>
+
+  <h3 style="margin-top:12px">What actually happens</h3>
+  <p>Employee picks "T.E.O" → submits application → <strong style="color:#f87171">profile field stays "Executive-ready"</strong>. The answer is captured somewhere in the application data, but it never gets written back to the profile's custom field.</p>
+
+  <h3 style="margin-top:12px">Why — in one sentence</h3>
+  <p>The IJP submit path routes answers through a <strong>hardcoded registry</strong> that only knows about two special fields (<code>contact_consent</code> and <code>skills-suggester</code>) — it has no handler for <code>custom_info.*</code> fields, so the answer silently falls through and nothing is written. The external (PCS) apply flow fixed this a while ago but the fix was never ported to the internal (IJP) flow.</p>
+</div>
+
+<!-- CONFIG PROOF -->
+<h2>Config (verified — stage.eightfold-eu.ai)</h2>
+<div class="section">
+  <h3>career_hub_base_config — question added</h3>
+  <pre>{
+  "questions": [{
+    "type": "dropdown",
+    "choices": [
+      { "value": "T.E.O",      "label": "T.E.O"      },
+      { "value": "Lidership",  "label": "Lidership"  }
+    ],
+    "label": "Choose any",
+    "question_id": "q_poc",
+    "template_apply_type": ["Global Talent Hub (Clone)"],
+    <span class="tree-ok">"profile_field": "custom_info.efcustom_text_talent_pipeline"</span>,  ← key config
+    "required": true
+  }],
+  "title": "POC"
+}</pre>
+
+  <h3>career_hub_profile_config — talent_pipeline field</h3>
+  <pre>"talent_pipeline": {
+  "data_config": {
+    <span class="tree-ok">"custom_field_name": "efcustom_text_talent_pipeline"</span>,
+    "is_editable": true
+  },
+  "display_config": { "data_key": "talentPipeline", "field_label": "Talent pipeline" }
+}</pre>
+  <p style="margin-top:8px"><span class="label-v">VERIFIED</span> — Both configs present on stage.eightfold-eu.ai. The <code>profile_field</code> key is correctly set; the bug is in code, not config.</p>
+  <div class="warn-box"><p><strong style="color:#fcd34d">Srashti's Comment 5 (May 27):</strong> the actual production field needed is <code>efcustom_text_talent_pipeline_osd</code> — the config above uses <code>efcustom_text_talent_pipeline</code> for the POC/testing. The fix must work for both (they follow the same <code>custom_info.*</code> pattern).</p></div>
+</div>
+
+<!-- FULL CODE TRACE — THE BUG -->
+<h2>Full code trace — why profile_field is NOT written (IJP path)</h2>
+<div class="section">
+  <pre><span class="tree-file">career_hub/actions/position_apply_base.py:112</span>  <span class="tree-fn">submit_application()</span>
+  <span class="tree-line">│</span>
+  <span class="tree-line">├─ L129:</span> <span class="tree-fn">question_base.reassign_answers_with_questions()</span>  <span class="tree-note">← builds answers_reassigned dict</span>
+  <span class="tree-line">│</span>
+  <span class="tree-line">└─ L146-151:</span>  <span class="tree-gap">★ THE ONLY PROFILE-UPDATE CALL for IJP ★</span>
+       <span class="tree-file">application/application_profile_fields/application_profile_field.py:38</span>
+       <span class="tree-fn">update_profile_using_qna(answers_reassigned, self.profile)</span>
+         <span class="tree-line">│</span>
+         <span class="tree-line">├─ L51-54:</span> flattens all sections' <code>answers</code> into qna_list
+         <span class="tree-line">│</span>
+         <span class="tree-line">└─ L57-63:</span> for each answer:
+              if profile_field := _qna.get('profile_field'):
+                <span class="tree-file">  → update_profile_by_question_field(_qna, pr, 'custom_info.efcustom_text_talent_pipeline')</span>
+                     <span class="tree-line">│</span>
+                     <span class="tree-line">L29:</span> <code>QNA_TO_PROFILE_FIELD_REGISTRY.get('custom_info.efcustom_text_talent_pipeline')</code>
+                          <span class="tree-line">│</span>
+                          <span class="tree-bad">🔴 → None   (registry only has 'contact_consent')</span>
+                          <span class="tree-bad">🔴 → returns []</span>
+                          <span class="tree-bad">🔴 → columns_to_update += []   (nothing added)</span>
+                          <span class="tree-bad">🔴 → candidate.save_profile() called but DATA_JSON not in columns</span>
+                          <span class="tree-bad">🔴 → profile field stays "Executive-ready". ← BUG</span></pre>
+
+  <div class="gap-marker">
+    <p><strong style="color:#fb923c">The gap — line 20-22, application_profile_field.py:</strong></p>
+    <pre style="margin:6px 0;">QNA_TO_PROFILE_FIELD_REGISTRY = {
+    'contact_consent': contact_consent_handler,
+    <span class="tree-bad"># ← custom_info.* fields have NO handler here</span>
+}</pre>
+    <p><code>update_profile_by_question_field()</code> at L29 does a pure dict lookup. Any <code>profile_field</code> value not in this dict → returns <code>[]</code> → silent no-op.</p>
+  </div>
+</div>
+
+<!-- WORKING PATH FOR COMPARISON -->
+<h2>Full code trace — why it WORKS in PCS v2 (external apply)</h2>
+<div class="section">
+  <pre><span class="tree-file">application/application_classes/application_base_class.py:1866</span>
+  <span class="tree-fn">application_submission()</span>   <span class="tree-note">← PCS/external flow</span>
+    <span class="tree-line">│</span>
+    <span class="tree-line">L1880:</span> <span class="tree-ok">gated by update_profile_from_question_answers_before_app_submission_gate</span>
+    <span class="tree-line">│</span>
+    <span class="tree-line">L1830-1833:</span> <span class="tree-fn">CandidateApplicationProfileEdit.__init__(current_user, apply_config, profile, answers)</span>
+                 <span class="tree-fn">.update_profile_from_questions()</span>
+                   <span class="tree-line">│</span>
+                   <span class="tree-line">L137-158</span>  <span class="tree-file">candidate_application_profile_edit.py:</span>
+                   <span class="tree-line">│</span>
+                   <span class="tree-line">for question in default_questions:</span>
+                   <span class="tree-line">  profile_field = "custom_info.efcustom_text_talent_pipeline"</span>
+                   <span class="tree-line">  │</span>
+                   <span class="tree-line">  if profile_field.startswith('custom_info'):   </span><span class="tree-ok">← ✅ matched</span>
+                   <span class="tree-line">    custom_field = "efcustom_text_talent_pipeline"</span>
+                   <span class="tree-line">    ef_custom_fields_questions[custom_field] = question</span>
+                   <span class="tree-line">  │</span>
+                   <span class="tree-line">L156:</span> <span class="tree-fn">handle_ef_custom_fields_question(ef_custom_fields_questions)</span>
+                          <span class="tree-line">│</span>
+                          <span class="tree-file">application/application_profile_fields/application_profile_edit_base.py:58</span>
+                          <span class="tree-line">L61: get_custom_fields_data() → {"efcustom_text_talent_pipeline": "T.E.O"}</span>
+                          <span class="tree-line">L64:</span> <span class="tree-fn">profile.update_custom_field_values({"efcustom_text_talent_pipeline": "T.E.O"}, ...)</span>
+                          <span class="tree-line">L65:</span> self.columns.append(ProfileFields.DATA_JSON)
+                          <span class="tree-ok">✅ Profile field updated. "Executive-ready" → "T.E.O"</span>
+    <span class="tree-line">│</span>
+    <span class="tree-line">L1841-1848:</span> candidate.save_profile(..., ProfileUpdateSource.SUBMIT_APPLICATION)</pre>
+</div>
+
+<!-- SIDE BY SIDE -->
+<h2>Gap analysis — IJP vs PCS</h2>
+<div class="section">
+  <div class="diff-section">
+    <div class="diff-box diff-bad">
+      <div class="diff-title">❌ IJP submit path (broken)</div>
+      <pre style="font-size:0.74rem;">position_apply_base.py:submit_application()
+  └── update_profile_using_qna()
+       └── QNA_TO_PROFILE_FIELD_REGISTRY lookup
+            └── 'custom_info.*' → NOT FOUND
+                 └── returns []
+                      └── nothing saved</pre>
+      <p style="font-size:0.8rem; margin-top:8px; color:#f87171;">No code path from IJP submit → <code>handle_ef_custom_fields_question()</code></p>
+    </div>
+    <div class="diff-box diff-ok">
+      <div class="diff-title">✅ PCS v2 submit path (working)</div>
+      <pre style="font-size:0.74rem;">application_base_class.py:application_submission()
+  └── CandidateApplicationProfileEdit
+       └── update_profile_from_questions()
+            └── profile_field.startswith('custom_info')
+                 └── handle_ef_custom_fields_question()
+                      └── profile.update_custom_field_values()</pre>
+      <p style="font-size:0.8rem; margin-top:8px; color:#4ade80;">Gated by <code>update_profile_from_question_answers_before_app_submission_gate</code></p>
+    </div>
+  </div>
+
+  <h3 style="margin-top:16px">Third path — contact_information_section (partial workaround only)</h3>
+  <pre style="font-size:0.74rem;"><span class="tree-file">application_profile_edit_base.py:72</span>
+<span class="tree-fn">update_profile_using_contact_information_section()</span>
+  └── profile_field.startswith('custom_info')   ← HANDLES IT
+       └── handle_ef_custom_fields_question()   ← works</pre>
+  <div class="warn-box">
+    <p><strong style="color:#fcd34d">Why this doesn't solve the ticket:</strong> This path only runs for questions placed in the <code>contact_information_section</code>. Telekom's question lives in a custom section "POC" with a rendering condition (<code>questions_render_condition</code> based on template name match). Moving it to <code>contact_information_section</code> would change where it appears in the UI — which the customer explicitly rejected (Srashti, Comment 10).</p>
+  </div>
+</div>
+
+<!-- THE FIX -->
+<h2>Fix — what needs to change</h2>
+<div class="section">
+  <div class="fix-box">
+    <p><strong style="color:#4ade80">Yavnika's direction (Comment 13):</strong> implement similar profile update logic in IJP as what PCS uses — reference <code>application_base_class.py#L1820</code></p>
+  </div>
+
+  <h3 style="margin-top:14px">Option A — Add <code>update_profile_from_questions()</code> to IJPApplicationProfileEdit (recommended)</h3>
+  <p>Mirror what <code>CandidateApplicationProfileEdit.update_profile_from_questions()</code> does for the IJP flow:</p>
+  <pre><span class="tree-file">www/application/application_profile_fields/ijp_application_profile_edit.py</span>
+<span class="tree-ok">+ add update_profile_from_general_questions(self, questions_with_answers):</span>
+<span class="tree-ok">+   for question in questions_with_answers:</span>
+<span class="tree-ok">+     profile_field = question.get('profile_field', '')</span>
+<span class="tree-ok">+     if profile_field.startswith('custom_info.') and '.' in profile_field:</span>
+<span class="tree-ok">+       custom_field = profile_field.split('.')[1]</span>
+<span class="tree-ok">+       ef_custom_fields_questions[custom_field] = question</span>
+<span class="tree-ok">+   self.handle_ef_custom_fields_question(ef_custom_fields_questions)  ← inherited from base</span>
+
+<span class="tree-file">www/career_hub/actions/position_apply_base.py:146</span>
+<span class="tree-ok">+ if answers_reassigned:</span>
+<span class="tree-ok">+   ijp_profile_edit = IJPApplicationProfileEdit(self.current_user, self.position_apply_config, self.profile, question_payload)</span>
+<span class="tree-ok">+   ijp_profile_edit.update_profile_from_general_questions(extracted_questions_with_answers)</span></pre>
+
+  <h3 style="margin-top:14px">Option B — Add <code>custom_info.*</code> handler to <code>update_profile_using_qna()</code></h3>
+  <p>Simpler but missing <code>current_user</code> context and type-transformation logic that <code>handle_ef_custom_fields_question</code> provides. <strong>Not recommended</strong> — loses the parity with PCS v2 and may miss field validation.</p>
+
+  <h3 style="margin-top:14px">Files to change (Option A)</h3>
+  <table>
+    <tr><th>File</th><th>Change</th></tr>
+    <tr><td><code>application_profile_fields/ijp_application_profile_edit.py</code></td><td>Add <code>update_profile_from_general_questions()</code> method using <code>handle_ef_custom_fields_question()</code> from base</td></tr>
+    <tr><td><code>career_hub/actions/position_apply_base.py</code></td><td>After existing <code>update_profile_using_qna()</code> call (~L148), invoke <code>IJPApplicationProfileEdit.update_profile_from_general_questions()</code>. Gate with a feature flag.</td></tr>
+    <tr><td>Gate config</td><td>Add new gate e.g. <code>ijp_update_profile_from_question_answers_gate</code> — mirrors PCS's <code>update_profile_from_question_answers_before_app_submission_gate</code></td></tr>
+  </table>
+</div>
+
+<!-- EVIDENCE TABLE -->
+<h2>Evidence table — observed / inferred / verified</h2>
+<div class="section">
+  <table>
+    <tr><th>Claim</th><th>Status</th><th>Source</th></tr>
+    <tr>
+      <td><code>profile_field: "custom_info.efcustom_text_talent_pipeline"</code> is in the question config</td>
+      <td><span class="label-v">VERIFIED</span></td>
+      <td>Jira description + stage config URL</td>
+    </tr>
+    <tr>
+      <td>Profile field stays "Executive-ready" after answering "T.E.O"</td>
+      <td><span class="label-v">VERIFIED</span></td>
+      <td>Jira description + screenshot attachment (employee enc_id: b047WeA9qQ on stage.eightfold-eu.ai)</td>
+    </tr>
+    <tr>
+      <td><code>QNA_TO_PROFILE_FIELD_REGISTRY</code> has only <code>contact_consent</code> — no <code>custom_info.*</code> handler</td>
+      <td><span class="label-v">VERIFIED</span></td>
+      <td>Read <code>application_profile_field.py:20-22</code></td>
+    </tr>
+    <tr>
+      <td>IJP submit calls <code>update_profile_using_qna()</code> at L146-151 of <code>position_apply_base.py</code></td>
+      <td><span class="label-v">VERIFIED</span></td>
+      <td>Read <code>position_apply_base.py:112-171</code></td>
+    </tr>
+    <tr>
+      <td>PCS v2 works via <code>CandidateApplicationProfileEdit.update_profile_from_questions()</code></td>
+      <td><span class="label-v">VERIFIED</span></td>
+      <td>Read <code>candidate_application_profile_edit.py:137-158</code> + <code>application_base_class.py:1820-1848</code></td>
+    </tr>
+    <tr>
+      <td><code>handle_ef_custom_fields_question()</code> in base class handles <code>custom_info.*</code> correctly</td>
+      <td><span class="label-v">VERIFIED</span></td>
+      <td>Read <code>application_profile_edit_base.py:58-65</code></td>
+    </tr>
+    <tr>
+      <td><code>IJPApplicationProfileEdit</code> inherits from <code>ApplicationProfileEditBase</code> (has <code>handle_ef_custom_fields_question</code>) but calls nothing for general questions</td>
+      <td><span class="label-v">VERIFIED</span></td>
+      <td>Read <code>ijp_application_profile_edit.py</code> — only <code>__init__</code>, 7 lines total</td>
+    </tr>
+    <tr>
+      <td>The actual customer field is <code>efcustom_text_talent_pipeline_osd</code> not <code>efcustom_text_talent_pipeline</code></td>
+      <td><span class="label-o">OBSERVED</span></td>
+      <td>Srashti's Comment 5 (May 27) — same pattern, fix covers both</td>
+    </tr>
+    <tr>
+      <td>Moving the question into <code>contact_information_section</code> is not acceptable to customer</td>
+      <td><span class="label-v">VERIFIED</span></td>
+      <td>Srashti's Comment 10 (Jun 2) — customer needs separate section with render condition</td>
+    </tr>
+    <tr>
+      <td>The <code>questions_render_condition</code> uses template name match — this is an IJP-only flow</td>
+      <td><span class="label-v">VERIFIED</span></td>
+      <td>Config in ticket: <code>template_apply_type: ["Global Talent Hub (Clone)"]</code></td>
+    </tr>
+  </table>
+</div>
+
+<!-- TICKET TIMELINE -->
+<h2>Ticket history / comments (key signals)</h2>
+<div class="section">
+  <div class="comment-thread">
+    <span class="comment-author">Yavnika Bhagat</span><span class="comment-date">Jun 1</span>
+    <div class="comment-body">Triage: "profile fields in questions are not directly updated in the submit flow." Suggested workaround: <code>contact_information_section</code>.</div>
+  </div>
+  <div class="comment-thread">
+    <span class="comment-author">Srashti Agrawal</span><span class="comment-date">Jun 2</span>
+    <div class="comment-body">Workaround rejected — question must be in its own section due to render condition. CC'd Jeremiah, Shailendra, Sumati.</div>
+  </div>
+  <div class="comment-thread">
+    <span class="comment-author">Yavnika Bhagat</span><span class="comment-date">Jun 3</span>
+    <div class="comment-body">Agreed it needs a code fix. <strong>Assigned to Akshat.</strong> Reference: <code>application_base_class.py#L1820</code> (PCS flow). "Implement similar profile update logic for IJP." Asked Akshat to provide ETA.</div>
+  </div>
+  <div class="comment-thread" style="border-left-color: #f87171;">
+    <span class="comment-author" style="color:#f87171;">Srashti Agrawal</span><span class="comment-date">Jun 8 — TODAY</span>
+    <div class="comment-body"><strong style="color:#f87171;">Akshat please help with an ETA — customer is waiting.</strong></div>
+  </div>
+</div>
+
+<!-- ETA -->
+<h2>ETA estimate</h2>
+<div class="section">
+  <div class="eta-box">
+    <p style="font-size:0.85rem; color:#d8b4fe; font-weight:600;">Complexity: Medium — the building blocks exist in the base class. The fix is wiring, not new logic.</p>
+    <div class="eta-timeline">
+      <div class="eta-row">
+        <div class="eta-dot"></div>
+        <div><strong>Code change</strong> — <code>ijp_application_profile_edit.py</code> + <code>position_apply_base.py</code> + gate: ~1 day</div>
+      </div>
+      <div class="eta-row">
+        <div class="eta-dot"></div>
+        <div><strong>Unit tests + local reproduce</strong> — IJP apply flow with custom field question: ~1 day</div>
+      </div>
+      <div class="eta-row">
+        <div class="eta-dot"></div>
+        <div><strong>CR + merge</strong>: 1-2 days</div>
+      </div>
+      <div class="eta-row">
+        <div class="eta-dot"></div>
+        <div><strong>Stage deploy + verify</strong> (telekom-growthhub.com stage env): same-day once merged</div>
+      </div>
+      <div class="eta-row">
+        <div class="eta-dot"></div>
+        <div><strong>Prod deploy</strong>: next scheduled release cycle</div>
+      </div>
+    </div>
+    <p style="margin-top:12px; font-size:0.83rem; color:#94a3b8;"><strong style="color:#d8b4fe;">Draft ETA for Srashti:</strong> "Code fix is scoped — approximately 3–4 business days to code + review + stage verification; production deployment via the next release cycle after that (typically 1 week). I'll update once the PR is up."</p>
+  </div>
+
+  <div class="warn-box" style="margin-top:10px;">
+    <p><strong style="color:#fcd34d">Yavnika's warning (Comment 13):</strong> "this will need good amount of testing due to complicated config structure and implementation" — the render condition + template matching adds test matrix complexity. Budget extra time for edge cases (employee without the matching template, question answered vs. skipped, existing non-null value being overwritten).</p>
+  </div>
+</div>
+
+<!-- RELATED TICKETS -->
+<h2>Related tickets (from bot triage)</h2>
+<div class="section">
+  <table>
+    <tr><th>Ticket</th><th>Relevance</th></tr>
+    <tr><td><code>ENG-184184</code></td><td>Likely the ENG story for this feature / prior related work — worth pulling</td></tr>
+    <tr><td><code>CS-16073</code></td><td>Similar profile_field issue (prior CS) — check if same root cause or different</td></tr>
+    <tr><td><code>CS-10669</code></td><td>Same PODs (TA-Core, DP-Data-Integrations) — older version of this class of bug</td></tr>
+  </table>
+  <p style="margin-top:8px; color:#64748b; font-size:0.8rem;">These were added by the Jira bot (ef-jira-api-user) — not manually verified. Pull ENG-184184 first; it may have context on the gate/implementation.</p>
+</div>
+
+<!-- NEXT STEPS -->
+<h2>Next steps</h2>
+<div class="section">
+  <table>
+    <tr><th>#</th><th>Action</th><th>Who</th></tr>
+    <tr><td>1</td><td>Reply to Srashti with ETA (see draft above)</td><td>Akshat — now</td></tr>
+    <tr><td>2</td><td>Pull ENG-184184 — may have gate name or prior attempt</td><td>Akshat</td></tr>
+    <tr><td>3</td><td>Write <code>update_profile_from_general_questions()</code> on <code>IJPApplicationProfileEdit</code> + gate</td><td>Akshat — code</td></tr>
+    <tr><td>4</td><td>Wire it into <code>position_apply_base.py:submit_application()</code> after L151</td><td>Akshat — code</td></tr>
+    <tr><td>5</td><td>Enable gate for telekom-growthhub.com on stage → verify profile field updates</td><td>Akshat — test</td></tr>
+    <tr><td>6</td><td>Confirm whether the fix also needs to handle non-<code>custom_info</code> arbitrary <code>profile_field</code>s (e.g. <code>location_detail.*</code>) — Yavnika's base class already has this logic</td><td>Akshat — design decision</td></tr>
+  </table>
+</div>
+
+<p style="margin-top:24px; font-size:0.72rem; color:#334155; text-align:center;">Generated: 2026-06-09 · Evidence: 7 code files read, 14 Jira comments, 2 config URLs · Loop iteration 1</p>
+</body>
+</html>

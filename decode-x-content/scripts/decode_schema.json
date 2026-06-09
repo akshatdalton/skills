@@ -1,0 +1,50 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "decode-x-content per-item decode",
+  "description": "One decoded piece of X content. Use as the StructuredOutput schema for batch/Workflow runs so N decodes aggregate cleanly.",
+  "type": "object",
+  "required": ["tid", "handle", "content_type", "archetype", "metrics", "bm_like", "levels", "verdict"],
+  "properties": {
+    "tid": {"type": "string", "description": "tweet id"},
+    "handle": {"type": "string"},
+    "url": {"type": "string"},
+    "content_type": {"type": "string", "enum": ["video", "text-post", "link-article", "quote-repost"]},
+    "archetype": {"type": "string", "description": "named archetype from the taxonomy (extensible — coin a new one if the data demands it)"},
+    "hook": {"type": "string", "description": "the opening line / on-screen hook"},
+    "post_text": {"type": "string", "description": "L1 — the tweet text verbatim"},
+    "metrics": {
+      "type": "object",
+      "properties": {
+        "bm": {"type": "integer"}, "lk": {"type": "integer"}, "rt": {"type": "integer"},
+        "rep": {"type": "integer"}, "views": {"type": "integer"},
+        "dur": {"type": "number", "description": "seconds (0 for non-video)"},
+        "ar": {"type": "string", "description": "aspect ratio w:h (or null)"}
+      }
+    },
+    "bm_like": {"type": "number", "description": "bookmarks / likes — the save-worthiness signal"},
+    "bm_per_1k_views": {"type": "number", "description": "bookmarks per 1000 views — reach-normalized save rate"},
+    "levels": {
+      "type": "object",
+      "description": "decode as deep as the input allows; stamp 'n/a (no audio/video)' for layers you cannot reach — never fabricate",
+      "properties": {
+        "post_text": {"type": "string", "description": "L1 — what the tweet text does"},
+        "transcript": {"type": "string", "description": "L2 — spoken content from Whisper, or 'n/a (no audio)'"},
+        "captions": {"type": "string", "description": "L3 — on-screen text, or 'n/a'"},
+        "visual": {"type": "string", "description": "L4 — what the keyframe contact sheet shows, or 'n/a (no video)'"},
+        "why": {"type": "string", "description": "L5 — why it earns saves/reach for the metric that matters"},
+        "timing": {"type": "string", "description": "L6 — posting timing vs launches/news, web-verified with source"}
+      }
+    },
+    "verdict": {"type": "string", "enum": ["works", "mixed", "weak"], "description": "for saves (bm:like), not raw likes"},
+    "do": {"type": "array", "items": {"type": "string"}, "description": "replicable do's grounded in this decode"},
+    "dont": {"type": "array", "items": {"type": "string"}, "description": "anti-patterns this post reveals"},
+    "evidence": {
+      "type": "object",
+      "description": "auditable artifacts backing the decode",
+      "properties": {
+        "sheet": {"type": "string"}, "transcript": {"type": "string"},
+        "sources": {"type": "array", "items": {"type": "string"}}
+      }
+    }
+  }
+}
