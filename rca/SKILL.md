@@ -39,16 +39,27 @@ An external signal triggers a disciplined, evidence-grounded investigation that 
 
 **Flags:** `--report` (default ON — persist the report file), `--intern` / `--audit` (render altitude via `/onepager`), `--html` (also build an HTML artifact via `/visualize-via-html`, opt-in). The recurring re-check always uses default `/loop` (self-paced) — there is no interval flag.
 
+## Source intake — pull from every source, self-verify each
+
+A signal is never just its title. During Phases 0–1, gather AND cross-check every source — then ground each claim yourself (verify-before-assert, rule 3):
+- **Ticket description + ALL comments.** Triage notes, prior RCA attempts, and pointers are often buried in comments — read them. **Self-verify every claim a comment makes** (it may be wrong, partial, or stale); treat it as a lead to ground, never as fact.
+- **Linked references** — linked issues, remote links, the originating Slack thread/permalink, related PRs/commits. Follow them; they carry the symptom history and who-said-what.
+- **Attachments** (screenshots, HARs, logs, CSVs). There is **no API to download Jira attachments**, so:
+  1. **Call it out and ask the user to share them** — when a ticket has attachments you cannot read, say so explicitly and ask the user to drag them into chat or give a path (use AskUserQuestion); OR
+  2. **Fetch via Claude in Chrome on the Eightfold profile** — Chrome profile `Default` (eightfold.ai / akshat.v@eightfold.ai). Select that browser/profile, open the ticket/attachment behind Eightfold SSO, and read it there. Use this when the attachment is SSO-gated and you can fetch it independently.
+  **Never assert from an attachment you have not actually seen** — if you can't read it, say so and ask.
+- **Code:** read the LOCAL checkout `~/eightfold/vscode` (and `~/eightfold/wipdp`) — grep/trace there, NOT on the EC2 box. Use `/efx` only to EXECUTE (repro, regional DB). See `/efx` "Local-first".
+
 ## Phase flow
 
 Each phase names the composed skill. Read playbook.md before Phase 3 if the signal touches eightfold data.
 
-- **0 · Pickup & route** — fire `/name-session`; detect the signal (table above); resolve the target. NEVER auto-ack a PagerDuty incident.
+- **0 · Pickup & route** — fire `/name-session`; detect the signal (table above); resolve the target and **consume every source** (see Source intake — comments, linked refs, attachments). NEVER auto-ack a PagerDuty incident.
 - **1 · Recall** — `**REQUIRED FIRST:** /brain-recall <ticket|url>` (READ-ONLY; arms continuous ingest). Read [state/rca_followups.md](state/rca_followups.md) — if this signal is already an open follow-up from a prior pass, resume it.
 - **2 · Calibrate altitude** — pin intern altitude up front (Akshat knows the product at overview level, NOT this ticket/feature). State the altitude in the render's source line; don't guess high and get corrected twice.
 - **3 · Triage-pinpoint, loop-until-dry** — walk the depth bar (rule 1). Apply the verify-before-assert gate (rule 3) BEFORE asserting each rung. Ground via `db_explorer` (eightfold MCP, StarRocks `log.www_server_log`), `/check-gate`, `/read-config`, and the AUTHORITATIVE store (rule 4, playbook.md). Pinpoint owners/rows, not the viewer proxy (rule 5). Keep digging until a pass surfaces NOTHING new — don't stop at the first plausible cause.
 - **4 · Runtime grounding** — convert inferred → verified with `**RUNTIME GROUNDING:** /efx` (`exec`/`submit`/`poll`; IPython snippet to pinpoint the failing line; HTTP repro; `--target dev|shared-eu|shared-ca` for regional prod / customer data). **Optional demo-account replication (when useful, not every time):** use `/efx` against the demo account `eightfolddemo-ashutosh.tanwar.com` to (a) set up the case and reproduce the bug, and (b) verify the proposed fix/check before recommending it (recipe in playbook.md).
-- **5 · Tree-format trace** — produce the full call path as a `file:line` tree (rule 8): one-line timeline + tree, failing node marked. Rendered as part of the intern write-up via `/onepager --intern` — not a separate skill call.
+- **5 · Tree-format trace** — produce the full call path as a `file:line` tree (rule 8): one-line timeline + tree, failing node marked. **Read the code from the LOCAL checkout `~/eightfold/vscode` (not the EC2 box — `/efx` is execution-only).** Rendered as part of the intern write-up via `/onepager --intern` — not a separate skill call.
 - **6 · Root cause + fix plan + UI verification — SCOPE STOPS HERE** — state the single verified root-cause fact; propose the fix as two tracks (rule 6); give UI before/after steps (re-runnable SQL/link, not a screenshot — rule 9). Do NOT implement. Do NOT ship.
 - **7 · Persist the RCA report (DEFAULT durable output)** — resolve the path (see [references/rca-report-template.md](references/rca-report-template.md)), fill the template. Inline-render via `**RENDER:** /onepager` (`--intern` when the feature is unfamiliar / `--audit` for the synthesis-first TTS read).
 - **8 · Offer drafts + ship-task (offer, never auto-run)** — offer a jargon-free Slack/Jira draft (clean customer summary + technical backup, split). NEVER send without an ALL-CAPS YES. Offer `**HANDOFF (offer only):** /ship-task <TICKET>` for the fix — do not auto-run it. `--html` → offer `**OPT-IN:** /visualize-via-html`.

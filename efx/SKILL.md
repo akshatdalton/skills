@@ -10,6 +10,13 @@ description: Use when running bash, python, or pytest on eightfold EC2 — the u
 
 Engine: `scripts/efx.py` (invoke directly — no wrapper) · cache: `.cache/cache.json` in this skill dir · design: `DESIGN.md`.
 
+## Local-first: read code locally, run on EC2
+
+**Reading / exploring / grepping / tracing code is a LOCAL operation — do NOT do it on the box.** The same trees are checked out locally and are faster (no VPN, full tooling):
+- `~/eightfold/vscode` — the www monorepo (`EightfoldAI/vscode`) · `~/eightfold/wipdp`
+
+Grep and trace call paths in the local checkout. Use `efx` **only to EXECUTE** code that needs the EC2 environment — pytest with EC2-only deps, an IPython snippet that hits the (regional) prod DB, the dev server. If a local file looks stale vs. the box, check the branch (`git -C ~/eightfold/vscode branch --show-current`) instead of reading on the box. This is general behavior for any code work, not just `efx` callers.
+
 ## When to use
 - Run pytest / a python snippet / a bash command on the **dev box** (us-west-2).
 - Run anything against a **region-specific** prod box / customer data (`shared-ca`=ca-central-1, `shared-eu`/`shared-eu-tm`=eu-central-1, …).
@@ -76,6 +83,7 @@ The dev box (us-west-2) cannot read another region's shard — use the regional 
 |---|---|
 | Raw `ssh 172.31.27.248 "pytest …"` | Use `efx exec` (handles VPN/env/flags) |
 | Running vscode pytest locally | EC2-only deps → `efx exec --target dev` |
+| Reading / grepping vscode code on the box | Read the LOCAL checkout `~/eightfold/vscode`; use efx only to EXECUTE |
 | Reading regional customer data from `dev` | Use the regional cluster target |
 | Long job over flaky VPN with `exec` | Use `submit`/`poll` |
 | `python` on the box | efx uses `python3` + venv automatically |
