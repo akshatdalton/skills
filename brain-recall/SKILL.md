@@ -171,10 +171,11 @@ Recall is the half Akshat reliably fires; ingest is the half he forgets. So reca
    ```bash
    mkdir -p ~/.claude/brain-ingest-queue
    cat > ~/.claude/brain-ingest-queue/<session_id>.json <<EOF
-   {"session_id":"<id>","project":"<vscode|wipdp|magnetx>","ticket":"<ENG-XXXX|initiative|null>","armed_at":"<ISO8601>","status":"pending"}
+   {"session_id":"<id>","project":"<vscode|wipdp|magnetx|claude-code|meetily>","ticket":"<ENG-XXXX|initiative|null>","armed_at":"<ISO8601>","status":"pending"}
    EOF
    ```
 3. Emit the 🧠 line shown in the output block above so the obligation lives in Claude's context.
+4. **Surface the last bg-ingest status** (bg runs are silent — no desktop popups — so recall is the feedback channel): read the last line of `~/.claude/brain-ingest-queue/status.jsonl` (if present) and, when it's from the last 48h, append one line to the recall output: `🧠 last bg ingest: <project> <status> ($<cost_usd>, <ts>)`. If `status` is `error`, add `→ inspect <log>` so a broken pipeline is noticed at the very next recall instead of silently rotting.
 
 **What consumes the marker:**
 - **Claude self-fires** `/brain-ingest --bg` at continuous-mode beats AND at a natural wrap-up (task done, task switch, `/clear` intent) — because the 🧠 line is in context. Non-blocking.
@@ -293,10 +294,18 @@ Build a search query from what was resolved in the standard recall:
 | Free-text `<topic>` arg | The topic verbatim |
 | Nothing resolved | cwd basename + any recent `🧠 capture:` breadcrumbs in this session |
 
-**Grep the wiki:**
+**Search the wiki — BM25 first (ranked), grep fallback:**
+```bash
+# Primary: ranked chunk retrieval over the whole vault (built 2026-06-09; 360+ chunks)
+cd ~/opensource/claude-obsidian-test && python3 scripts/bm25-index.py query "<topic terms>"
+# → JSON candidates with chunk paths under .vault-meta/chunks/<id>/chunk-NNN.json;
+#   each chunk JSON carries the source page path — collect the distinct top page paths.
+```
+Fallback (index missing or query errors):
 ```bash
 grep -rl "<term1>\|<term2>" ~/opensource/claude-obsidian-test/wiki/ | grep -v "hot.md\|log.md\|index.md"
 ```
+⚠️ If BM25 errors with "no chunks directory" or results look stale (a page you KNOW exists doesn't rank), the index is behind the vault — note "wiki retrieval index stale; run /brain-ingest --v2 rebuild" in the output and use the grep fallback for this recall.
 
 **Read the top 3 matching pages** (priority order: concept pages > entity pages > source pages). Skip pages already covered by hot.md.
 

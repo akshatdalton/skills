@@ -476,6 +476,14 @@ After creating pages:
 
 4. **.manifest.json** — update with the new source file entry: `hash`, `ingested_at`, `pages_created`.
 
+5. **Rebuild the retrieval index** — MANDATORY, or the new pages stay invisible to BM25-ranked recall (brain-recall --v2 queries it):
+   ```bash
+   cd ~/opensource/claude-obsidian-test && \
+     python3 scripts/contextual-prefix.py --all --no-llm && \
+     python3 scripts/bm25-index.py build
+   ```
+   `--no-llm` = synthetic tier-3 prefixes, fully on-machine, zero egress, fast (~seconds). If either script errors, don't fail the ingest — note "BM25 rebuild failed: <err>" in the report so the next recall knows the index is stale.
+
 ### V2 Step 5 — Report
 
 After the standard brain-ingest report, append:
@@ -489,6 +497,7 @@ After the standard brain-ingest report, append:
     - wiki/entities/<EntityName>.md (new | updated)
   hot.md: updated
   log.md: updated
+  BM25 index: rebuilt (<N> chunks) | FAILED: <err> — recall will use grep fallback
 ```
 
 ### V2 Notes

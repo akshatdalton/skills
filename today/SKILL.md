@@ -25,7 +25,7 @@ Polymorphic skill. One entry point for all daily-planning + dashboard interactio
 | `/today next` | next | Start the ★ task via `/ship-task`. |
 | `/today ingest <dump>` | ingest | Parse a meeting/discussion dump → propose candidate tickets (via `/create-jira-ticket-with-reference`), decisions (into vault learnings.md), and priority placements. |
 | `/today retro` | retro | Sprint wrap-up report (lazy-loaded; see `retro.md` in skill dir). |
-| `/today oncall [page\|triage\|sheet] …` | oncall | On-call command center for the TM/Career Hub primary rotation: live PagerDuty incidents, due-date-ordered triage tickets, follow-ups, incident-diagnosis playbook (lazy-loaded; see `oncall.md`). |
+| `/today oncall [page\|triage\|sheet] …` | oncall | On-call command center for the TM/Career Hub primary rotation: live PagerDuty incidents, due-date-ordered triage tickets, follow-ups, incident-diagnosis playbook (lazy-loaded; see `oncall.md`). `triage` is now a thin alias for the standalone `/rca` skill, where RCA discipline lives. |
 | `/today meetings` | meetings | List auto-recorded meeting transcripts awaiting a summary. |
 | `/today meeting <slug\|latest>` | meeting | Summarize a recorded meeting → write `summary.md` + surface TL;DR / action items / decisions; offer to ingest items. |
 
@@ -194,6 +194,17 @@ for r in results:  # list of subagent JSON envelopes
 
 If /today crashes mid-render, cursors stay at their previous value — the next run re-shows the items.
 
+### Step 9.5 — Wiki hot-cache read (v2 brain; inline, NO subagent)
+
+Also read the LAST line of `~/.claude/brain-ingest-queue/status.jsonl` (if it exists): the most recent background brain-ingest run. If its `ts` is within the last 24h, render one footer line: `🧠 Last bg ingest: <project> <status> ($<cost>, <relative time>)` — and if `status` is `error`, add `→ check <log path>`. This replaces the old desktop notifications as the visibility channel.
+
+Read the TOP session block only (first `## <date> — ...` block, ~150 words) of `~/opensource/claude-obsidian-test/wiki/hot.md`. Zero-latency, no agent. Two uses:
+
+1. **Render** one footer line in the BRIEFING: `📚 Wiki: <one-line gist of the top block> — [[Page A]] · [[Page B]]` (the 2-3 most actionable wikilinks from that block). Skip the line entirely if the vault is missing or the top block is older than 7 days (stale context is worse than none).
+2. **Correlate**: if a BRIEFING item's topic matches a wikilink in the block (e.g. an oncall page arriving while `[[On-call Triage Pattern]]` is hot), append `(📚 wiki has context)` to that item — it tells Akshat a `/brain-recall --v2 <topic>` will be warm.
+
+When Akshat picks a task (`/today next` or names a ticket), suggest `/brain-recall <ticket> --v2` as the kickoff if the wiki has matching pages (quick check: `cd ~/opensource/claude-obsidian-test && python3 scripts/bm25-index.py query "<ticket topic>"` — only when a topic is known; never block the render on it).
+
 ### Step 10 — Render the ★ BRIEFING block
 
 Render the BRIEFING above the existing dashboard. Block layout (omit any sub-block where `items[]` is empty and `fyi_count == 0`; otherwise collapse to a single line like `(no new since HH:MM)`):
@@ -332,7 +343,7 @@ Read `~/.claude/skills/today/retro.md` for full instructions (lazy-loaded — on
 
 ## Mode: oncall
 
-Read `~/.claude/skills/today/oncall.md` for full instructions (lazy-loaded — only when `/today oncall …` is invoked). Drives the TM/Career Hub primary on-call rotation: live PagerDuty incidents (service `P0IHZZS`, schedule `PBWVBGY`), due-date-ordered triage tickets, daily follow-ups, the incident-diagnosis DB playbook, and the per-sprint tracking sheet. Sub-args: `page <id>` (run diagnosis, never auto-ack), `triage <TICKET>` (route to `/ship-task` with `TM on call` label), `sheet` (log statuses). When `aws` is unauthed, surface the AWS console link instead of failing.
+Read `~/.claude/skills/today/oncall.md` for full instructions (lazy-loaded — only when `/today oncall …` is invoked). Drives the TM/Career Hub primary on-call rotation: live PagerDuty incidents (service `P0IHZZS`, schedule `PBWVBGY`), due-date-ordered triage tickets, daily follow-ups, the incident-diagnosis DB playbook, and the per-sprint tracking sheet. Sub-args: `page <id>` (run diagnosis, never auto-ack), `triage <TICKET>` (thin alias for `/rca <TICKET>` — RCA discipline lives in the standalone `/rca` skill; adds the `TM on call` PR label if `/ship-task` is taken), `sheet` (log statuses). When `aws` is unauthed, surface the AWS console link instead of failing.
 
 ## Meeting transcripts (auto-recorder integration)
 

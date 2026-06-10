@@ -79,19 +79,13 @@ WHERE namespace='career_hub' AND response_code=500
   AND t_create >= '<START>' AND t_create <= '<END>' LIMIT 100;
 ```
 
-## ★ Triage depth bar (Akshat's standard — do not stop early)
+## ★ Triage depth bar → see `/rca`
 
-Never report a *category* of cause. Drive to a single, verifiable, data-level fact and keep going down this ladder, proving each rung:
-
-**symptom → endpoint → field → exact value → value's TYPE → which owners/rows hold it → source of the bad data**
-
-- **Separate observed / inferred / verified** on every claim (e.g. value `80` = observed in log; int-ness = inferred from code; both = verified by EC2 repro). Never blur them. Expect "where did you get that from?".
-- **Pinpoint actual owners, not the proxy** — the log's `for user-` is the viewer; query the data store for who/what truly holds the bad value (e.g. 102 profiles, not 133 viewers).
-- **Split the immediate fix from the underlying defect** — a gate/flag may stop the 500 while the data is still wrong; surface both as separate tracks.
-- **Reproduce code hypotheses deterministically** rather than asserting from reading.
-- Every claim carries an auditable artifact; the writeup stays tight and plain. See `[[feedback-triage-pinpoint-precision]]`, `[[feedback-cite-artifacts-for-audit]]`.
+The triage depth bar (symptom → endpoint → field → exact value → value's TYPE → owners/rows → source of the bad data) and the observed/inferred/verified discipline now live canonically in **`/rca`** ([SKILL.md](/Users/akshat.v/.claude/skills/rca/SKILL.md) "The contract"). When an on-call page or ticket needs RCA, fire `/rca <signal>`. Do not duplicate the rules here. See `[[feedback-triage-pinpoint-precision]]`, `[[feedback-cite-artifacts-for-audit]]`.
 
 ## Known patterns & learnings (from real pages — grow this)
+
+> **RCA discipline + bug-class knowledge is now canonical in `/rca`.** The triage depth bar, the verify-before-assert gate, the authoritative-artifact map, and the recurring bug classes (custom-field str-coercion, RSS-cap `MemoryError`, profile-skills data model, company-logo render, search bulk-download cap, PA-blank-by-design), region sharding, query templates, and data-access governance now live in **`/rca`** ([SKILL.md](/Users/akshat.v/.claude/skills/rca/SKILL.md) + [playbook.md](/Users/akshat.v/.claude/skills/rca/playbook.md)). Fire `/rca <signal>` for any RCA. The patterns below are retained as the on-call **incident-operations** record (and feed `/rca` playbook.md).
 
 1. **"Too Many Product Exceptions" RCA = CloudWatch Logs Insights on `WWW`** (not db_explorer). Parse `Uncaught exception- <ex> in- <endpoint> for user- <user>` → group by `ex,endpoint` then add `,user`. The per-exception-type metrics `www-exceptions.careerhub.<Type>.sum` give a quick composition without logs (no endpoint dim, but type breakdown exists).
 2. **Attribution caveat:** the log's `for user-` is the **request viewer**, and `in-` is `request.endpoint` (no path params) — so the **rendered entity/profile_id is NOT in the log**. `apps/index_view.py:373` `all_exception_handler` is the 500 funnel. Don't equate the failing viewer with the data owner without checking the data (for self-service careerhub they usually coincide, but prove it).
@@ -138,18 +132,20 @@ Run the PagerDuty playbook above end-to-end:
 3. Build + run the two DB queries (substitute window) via `query-data` / eightfold MCP.
 4. Output: impacted endpoints, single-vs-multi verdict (code vs infra), the offending user/trace, and a proposed next action. **Never** `manage_incidents` (ack/resolve/reassign) without explicit user confirmation.
 
-### `/today oncall triage <TICKET>`
-Fetch the ticket + triage comment → if `code-fix-needed`, route to `/ship-task <TICKET>` (which owns work→PR→merge). Ensure the PR carries the **`TM on call`** label. Verify/fix the triage label.
+### `/today oncall triage <TICKET>`  → ALIAS for `/rca <TICKET>`
+RCA discipline now lives canonically in **`/rca`** — prefer typing `/rca <TICKET>` directly. This sub-mode is a thin alias retained for muscle memory:
+- Fire `Skill(skill="rca", args="<TICKET>")`. `/rca` drives the depth bar, grounding, tree trace, the persisted RCA report, and offers `/ship-task`.
+- On-call-specific add-on only: if `/ship-task` is taken, ensure the PR carries the **`TM on call`** label, and verify/fix the Jira triage label.
 
 ### `/today oncall sheet`
 Open the tracking sheet; if a new rotation, propose a new sheet tab + draft your ticket rows (ticket · status · short comment) from the live JQL in render step 3. Confirm before writing.
 
 ## Driving checklist (how I help each on-call day)
 
-> **★ Verify-before-assert gate — run before every load-bearing claim (esp. "X is present/missing" or "Y did Z"):** name the source · state what it filters/renames/drops · require **≥2 independent sources for any *absence*** · quote the recorded artifact for any *who-did-what*. Pick evidence by **fitness-for-claim** (does this source actually contain the thing I'm claiming?), not by what's already open. If not yet grounded, present it **labeled observed/inferred/verified** + name the query that would ground it — never assert flat. (This is the root cause of every CS-17128 correction; see [[feedback-oncall-data-grounding-and-dual-audience]].)
+> **★ Verify-before-assert gate → enforced by `/rca`.** Before any load-bearing claim, run /rca's gate: fitness-for-claim · **≥2 independent sources for any *absence*** · quote the recorded artifact for who-did-what · label observed/inferred/verified, never assert flat. See `/rca` [SKILL.md](/Users/akshat.v/.claude/skills/rca/SKILL.md) "The contract" rule 3. (Root cause of every CS-17128 correction; see [[feedback-oncall-data-grounding-and-dual-audience]].)
 
 - [ ] `/today oncall` → confirm shift, surface unacked incidents + overdue tickets in one screen.
 - [ ] For each page: `/today oncall page <id>` → diagnosis snippet (no auto-ack).
-- [ ] For each code-fix ticket: `/today oncall triage <TICKET>` → `/ship-task` to merge.
+- [ ] For each code-fix ticket: `/rca <TICKET>` (drives RCA + offers `/ship-task`).
 - [ ] Daily follow-up pings drafted (you send — caps-YES rule for Slack).
 - [ ] End of day: `/today oncall sheet` → log statuses.
